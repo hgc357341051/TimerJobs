@@ -8,7 +8,6 @@
 
 ```
 jobs/
-├── cmd/                # 命令行工具
 ├── config/             # 配置文件（支持多环境）
 ├── controller/         # 控制器（业务逻辑）
 │   ├── admins/         # 管理员相关接口
@@ -22,7 +21,6 @@ jobs/
 ├── models/             # 数据模型
 ├── routers/            # 路由注册
 ├── runtime/            # 运行时日志、任务输出
-├── scripts/            # 运维脚本
 ├── main.go             # 主程序入口
 └── Dockerfile          # Docker部署文件
 ```
@@ -73,9 +71,299 @@ go mod tidy
 
 ## 主要功能与接口
 
-
 ### 任务管理
-- `/jobs/add` 新增任务
+
+#### 创建任务 API (`POST /jobs/add`)
+
+系统支持三种执行模式：**HTTP请求**、**系统命令**、**内置函数**。每种模式都有不同的参数配置。
+
+##### 通用参数
+
+| 参数名 | 类型 | 必填 | 说明 | 示例 |
+|--------|------|------|------|------|
+| `name` | string | 是 | 任务名称，唯一标识 | `"数据备份任务"` |
+| `desc` | string | 否 | 任务描述 | `"每日凌晨备份数据库"` |
+| `cron_expr` | string | 是 | Cron表达式，定义执行时间 | `"0 2 * * *"` |
+| `mode` | string | 是 | 执行模式：`http`/`command`/`func` | `"http"` |
+| `command` | string | 是 | 执行内容（根据mode不同而不同） | 见下方详细说明 |
+| `state` | int | 否 | 任务状态：0=等待，1=执行中，2=停止 | `0` |
+| `allow_mode` | int | 否 | 执行模式：0=并行，1=串行，2=立即执行 | `0` |
+| `max_run_count` | int | 否 | 最大执行次数，0=无限制 | `0` |
+
+##### 1. HTTP 模式 (`mode: "http"`)
+
+用于调用外部 HTTP API 接口。
+
+**command 格式说明：**
+```
+【url】URL地址
+【mode】请求方式
+【headers】请求头1:值1|||请求头2:值2
+【data】POST数据
+【cookies】Cookie字符串
+【proxy】代理地址
+【times】执行次数
+【result】自定义结果判断字符串
+```
+
+**详细示例：**
+
+1. **简单GET请求**
+```json
+{
+  "name": "健康检查",
+  "desc": "检查服务健康状态",
+  "cron_expr": "0 */2 * * * *",
+  "mode": "http",
+  "command": "【url】https://api.example.com/health\n【mode】GET"
+}
+```
+
+2. **POST请求带JSON数据**
+```json
+{
+  "name": "数据同步",
+  "desc": "同步用户数据",
+  "cron_expr": "0 0 2 * * *",
+  "mode": "http",
+  "command": "【url】https://api.example.com/sync\n【mode】POST\n【headers】Content-Type:application/json\n【data】{\"action\":\"sync\",\"timestamp\":\"2024-01-01\"}"
+}
+```
+
+
+4. **使用代理的请求**
+```json
+{
+  "name": "代理请求",
+  "desc": "通过代理访问API",
+  "cron_expr": "0 */5 * * * *",
+  "mode": "http",
+  "command": "【url】https://api.example.com/data\n【mode】GET\n【proxy】http://proxy.example.com:8080"
+}
+```
+
+5. **带Cookie的请求**
+```json
+{
+  "name": "会话请求",
+  "desc": "保持会话的API调用",
+  "cron_expr": "0 0 */1 * * *",
+  "mode": "http",
+  "command": "【url】https://api.example.com/user/profile\n【mode】GET\n【cookies】sessionid=abc123; userid=456"
+}
+```
+
+**配置参数说明：**
+
+| 参数 | 说明 | 示例 |
+|------|------|------|
+| `【url】` | 请求的URL地址（必填） | `【url】https://api.example.com/endpoint` |
+| `【mode】` | 请求方式，默认GET | `【mode】POST` |
+| `【headers】` | 请求头，多个用`|||`分隔 | `【headers】Content-Type:application/json|||Authorization:Bearer token` |
+| `【data】` | POST请求的数据 | `【data】{"key":"value"}` |
+| `【cookies】` | Cookie字符串 | `【cookies】sessionid=123; userid=456` |
+| `【proxy】` | 代理服务器地址 | `【proxy】http://proxy.example.com:8080` |
+| `【times】` | 执行次数，0=无限制 | `【times】3` |
+| `【result】` | 自定义成功判断字符串 | `【result】success` |
+
+##### 2. 命令模式 (`mode: "command"`)
+
+用于执行系统命令或脚本。
+
+**command 格式说明：**
+```
+【command】要执行的命令
+【workdir】工作目录
+【env】环境变量1|||环境变量2
+【timeout】超时时间(秒)
+```
+
+**详细示例：**
+
+1. **简单命令**
+```json
+{
+  "name": "磁盘清理",
+  "desc": "清理临时文件",
+  "cron_expr": "0 0 4 * * *",
+  "mode": "command",
+  "command": "find /tmp -name '*.tmp' -mtime +7 -delete"
+}
+```
+
+2. **带工作目录的命令**
+```json
+{
+  "name": "备份脚本",
+  "desc": "执行数据库备份脚本",
+  "cron_expr": "0 0 2 * * *",
+  "mode": "command",
+  "command": "【command】./backup.sh\n【workdir】/opt/scripts"
+}
+```
+
+3. **带环境变量的命令**
+```json
+{
+  "name": "环境变量命令",
+  "desc": "使用特定环境变量执行命令",
+  "cron_expr": "0 0 6 * * *",
+  "mode": "command",
+  "command": "【command】echo $CUSTOM_VAR\n【env】CUSTOM_VAR=test_value|||DEBUG=true"
+}
+```
+
+4. **带超时的命令**
+```json
+{
+  "name": "超时命令",
+  "desc": "设置超时时间的命令",
+  "cron_expr": "0 */10 * * * *",
+  "mode": "command",
+  "command": "【command】long-running-script.sh\n【timeout】60"
+}
+```
+
+5. **Windows系统命令**
+```json
+{
+  "name": "Windows清理",
+  "desc": "清理Windows临时文件",
+  "cron_expr": "0 0 5 * * *",
+  "mode": "command",
+  "command": "del /q /f %TEMP%\\*.tmp"
+}
+```
+
+**配置参数说明：**
+
+| 参数 | 说明 | 示例 |
+|------|------|------|
+| `【command】` | 要执行的命令（必填） | `【command】ls -la` |
+| `【workdir】` | 工作目录 | `【workdir】/opt/scripts` |
+| `【env】` | 环境变量，多个用`|||`分隔 | `【env】PATH=/usr/bin|||DEBUG=true` |
+| `【timeout】` | 超时时间（秒），默认30秒 | `【timeout】60` |
+
+##### 3. 函数模式 (`mode: "func"`)
+
+使用系统内置函数，支持参数传递。
+
+**command 格式说明：**
+```
+【name】函数名
+【arg】参数1,参数2,参数3
+```
+
+**内置函数列表：**
+
+| 函数名 | 功能 | 参数格式 | 示例 |
+|--------|------|----------|------|
+| `Dayin` | 打印任务信息 | `参数1,参数2,参数3` | `Dayin 1,hello,true` |
+| `Test` | 测试函数 | `任意参数` | `Test test123` |
+| `Hello` | 问候函数 | `姓名` | `Hello 张三` |
+| `Time` | 时间函数 | `时间格式` | `Time 2006-01-02 15:04:05` |
+| `Echo` | 回显函数 | `任意文本` | `Echo Hello World` |
+| `Math` | 数学计算 | `操作符,数字1,数字2` | `Math +,10,5` |
+| `File` | 文件操作 | `操作,文件路径` | `File read,/path/to/file` |
+| `Database` | 数据库操作 | `操作,SQL语句` | `Database query,SELECT * FROM users` |
+| `Email` | 邮件发送 | `收件人,主题,内容` | `Email user@example.com,测试,邮件内容` |
+| `SMS` | 短信发送 | `手机号,内容` | `SMS 13800138000,测试短信` |
+| `Webhook` | Webhook调用 | `URL,数据` | `Webhook https://webhook.site/xxx,{"data":"value"}` |
+| `Backup` | 备份操作 | `源路径,目标路径` | `Backup /data,/backup` |
+| `Cleanup` | 清理操作 | `路径,天数` | `Cleanup /tmp,7` |
+| `Monitor` | 监控检查 | `检查项` | `Monitor disk` |
+| `Report` | 报告生成 | `报告类型` | `Report daily` |
+
+**详细示例：**
+
+1. **基础函数调用**
+```json
+{
+  "name": "时间显示",
+  "desc": "显示当前时间",
+  "cron_expr": "0 */5 * * * *",
+  "mode": "func",
+  "command": "【name】Time\n【arg】2006-01-02 15:04:05"
+}
+```
+
+2. **数学计算**
+```json
+{
+  "name": "数学计算",
+  "desc": "执行数学运算",
+  "cron_expr": "0 */30 * * * *",
+  "mode": "func",
+  "command": "【name】Math\n【arg】+,100,50"
+}
+```
+
+3. **文件操作**
+```json
+{
+  "name": "文件检查",
+  "desc": "检查文件状态",
+  "cron_expr": "0 0 */2 * * *",
+  "mode": "func",
+  "command": "【name】File\n【arg】read,/var/log/app.log"
+}
+```
+
+4. **数据库操作**
+```json
+{
+  "name": "数据统计",
+  "desc": "统计用户数量",
+  "cron_expr": "0 0 1 * * *",
+  "mode": "func",
+  "command": "【name】Database\n【arg】query,SELECT COUNT(*) FROM users"
+}
+```
+
+5. **复杂参数函数**
+```json
+{
+  "name": "Dayin测试",
+  "desc": "测试Dayin函数",
+  "cron_expr": "0 */15 * * * *",
+  "mode": "func",
+  "command": "【name】Dayin\n【arg】1,hello,true"
+}
+```
+
+**配置参数说明：**
+
+| 参数 | 说明 | 示例 |
+|------|------|------|
+| `【name】` | 函数名（必填） | `【name】Time` |
+| `【arg】` | 函数参数，用逗号分隔 | `【arg】参数1,参数2,参数3` |
+
+##### Cron表达式说明
+
+| 字段 | 允许值 | 特殊字符 | 说明 |
+|------|--------|----------|------|
+| 秒 | 0-59 | `* / , -` | 秒数（0-59） |
+| 分 | 0-59 | `* / , -` | 分钟（0-59） |
+| 时 | 0-23 | `* / , -` | 小时（0-23） |
+| 日 | 1-31 | `* / , - ?` | 日期（1-31） |
+| 月 | 1-12 | `* / , -` | 月份（1-12） |
+| 周 | 0-7 | `* / , - ?` | 星期（0或7=周日） |
+
+**常用Cron表达式示例：**
+
+| 表达式 | 说明 |
+|--------|------|
+| `* * * * * *` | 每秒执行 |
+| `0 * * * * *` | 每分钟执行 |
+| `0 0 * * * *` | 每小时执行 |
+| `0 0 0 * * *` | 每天0点执行 |
+| `0 0 2 * * *` | 每天2点执行 |
+| `0 30 9 * * *` | 每天9点30分执行 |
+| `0 0 0 * * 1` | 每周一0点执行 |
+| `0 0 0 1 * *` | 每月1号0点执行 |
+
+#### 其他任务管理接口
+
 - `/jobs/edit` 编辑任务
 - `/jobs/del` 删除任务
 - `/jobs/list` 任务列表（分页）
@@ -103,6 +391,7 @@ go mod tidy
 - `/admin/list` 管理员列表
 - `/admin/status` 修改状态
 - `/admin/delete` 删除管理员
+
 ---
 
 ## 业务开发规范
