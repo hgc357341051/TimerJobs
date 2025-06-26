@@ -169,16 +169,7 @@ jobs:
         asset_path: ./xiaohu-jobs-darwin-arm64
         asset_name: xiaohu-jobs-darwin-arm64
         asset_content_type: application/octet-stream
-        
-    - name: 上传 API 文档
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./docs
-        asset_name: api-docs-${{ github.ref_name }}
-        asset_content_type: application/zip
+
         
     - name: 检查 Release 状态
       if: always()
@@ -202,5 +193,4 @@ jobs:
         name: release-binaries-${{ github.ref_name }}
         path: |
           xiaohu-jobs-*
-          docs/
         retention-days: 30 git
