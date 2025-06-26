@@ -50,11 +50,11 @@ EXPOSE 36363
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://127.0.0.1:36363/ || exit 1
+    CMD curl -f http://127.0.0.1:36363/jobs/health || exit 1
 
 # 设置环境变量
 ENV GIN_MODE=release
 ENV TZ=Asia/Shanghai
 
 # 启动命令
-ENTRYPOINT ["./jobs"] 
+ENTRYPOINT ["./jobs", "start"] 

@@ -7,9 +7,9 @@ services:
     container_name: xiaohu-jobs
     restart: unless-stopped
     working_dir: /app
-    command: ["./main", "start", "-d", "-f"]
+    command: ["./main", "start"]
     ports:
-      - "8080:8080"
+      - "36363:36363"
     volumes:
       - ./config:/app/config
       - ./runtime:/app/runtime
@@ -32,35 +32,35 @@ services:
     networks:
       - xiaohu-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/jobs/health"]
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:36363/jobs/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
-    depends_on:
-      - mysql
+    # depends_on:
+    #   - mysql
 
   # MySQL 服务（如需用 MySQL，jobs 的 host 要写 mysql）
-  mysql:
-    image: mysql:8.0
-    container_name: xiaohu-mysql
-    restart: unless-stopped
-    environment:
-      MYSQL_ROOT_PASSWORD: root123456
-      MYSQL_DATABASE: xiaohu_jobs
-      MYSQL_USER: xiaohu
-      MYSQL_PASSWORD: xiaohu123
-      TZ: Asia/Shanghai
-    ports:
-      - "3306:3306"
-    volumes:
-      - mysql_data:/var/lib/mysql
-    networks:
-      - xiaohu-network
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      timeout: 20s
-      retries: 10
+  # mysql:
+  #   image: mysql:8.0
+  #   container_name: xiaohu-mysql
+  #   restart: unless-stopped
+  #   environment:
+  #     MYSQL_ROOT_PASSWORD: root123456
+  #     MYSQL_DATABASE: xiaohu_jobs
+  #     MYSQL_USER: xiaohu
+  #     MYSQL_PASSWORD: xiaohu123
+  #     TZ: Asia/Shanghai
+  #   ports:
+  #     - "3306:3306"
+  #   volumes:
+  #     - mysql_data:/var/lib/mysql
+  #   networks:
+  #     - xiaohu-network
+  #   healthcheck:
+  #     test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+  #     timeout: 20s
+  #     retries: 10
 
 
   # 如需 Nginx，取消注释
@@ -79,9 +79,9 @@ services:
   #   networks:
   #     - xiaohu-network
 
-volumes:
-  mysql_data:
-    driver: local
+# volumes:
+#   mysql_data:
+#     driver: local
   # redis_data:
   #   driver: local
 

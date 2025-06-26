@@ -11,8 +11,7 @@ env:
   # Docker 镜像标签配置
   DOCKER_REGISTRY: 'docker.io'  # 可以改为其他镜像仓库
   IMAGE_NAME: 'xiaohu-jobs'
-  # 版本标签策略
-  VERSION_TAG: ${{ github.ref_name == 'main' && 'latest' || github.ref_name }}
+  # 构建标签
   BUILD_TAG: ${{ github.run_number }}
   COMMIT_TAG: ${{ github.sha }}
   # 使用 GitHub Actions 支持的日期格式
@@ -110,42 +109,11 @@ jobs:
       if: steps.check-docker-creds.outputs.docker_creds_available == 'true'
       id: docker-tags
       run: |
-        # 基础镜像名称
         IMAGE_NAME="${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}"
-        
-        # 生成时间标签
-        CURRENT_DATE=$(date +%Y%m%d)
-        CURRENT_TIME=$(date +%H%M%S)
-        TIME_TAG="${IMAGE_NAME}:${CURRENT_DATE}-${CURRENT_TIME}"
-        
-        # 生成版本标签
-        VERSION_TAG="${IMAGE_NAME}:${{ env.VERSION_TAG }}"
         BUILD_TAG="${IMAGE_NAME}:v${{ env.BUILD_TAG }}"
-        
-        # 如果是发布版本，添加语义化版本标签
-        if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-          VERSION="${GITHUB_REF#refs/tags/}"
-          SEMVER_TAG="${IMAGE_NAME}:${VERSION}"
-          echo "semver_tag=${SEMVER_TAG}" >> $GITHUB_OUTPUT
-        fi
-        
-        # 输出标签
-        echo "version_tag=${VERSION_TAG}" >> $GITHUB_OUTPUT
         echo "build_tag=${BUILD_TAG}" >> $GITHUB_OUTPUT
-        echo "time_tag=${TIME_TAG}" >> $GITHUB_OUTPUT
-        
-        # 构建标签列表
-        TAGS="${VERSION_TAG}\n${BUILD_TAG}\n${TIME_TAG}"
-        if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-          TAGS="${TAGS}\n${SEMVER_TAG}"
-        fi
-        
-        echo "all_tags<<EOF" >> $GITHUB_OUTPUT
-        echo -e "${TAGS}" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
-        
-        echo "生成的标签："
-        echo -e "${TAGS}"
+        echo "all_tags=${BUILD_TAG}" >> $GITHUB_OUTPUT
+        echo "生成的标签：${BUILD_TAG}"
         
     - name: 调试标签信息
       if: steps.check-docker-creds.outputs.docker_creds_available == 'true'
@@ -153,7 +121,6 @@ jobs:
         echo "=== Docker 标签调试信息 ==="
         echo "DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}"
         echo "IMAGE_NAME: ${{ env.IMAGE_NAME }}"
-        echo "VERSION_TAG: ${{ env.VERSION_TAG }}"
         echo "BUILD_TAG: ${{ env.BUILD_TAG }}"
         echo "当前日期: $(date +%Y%m%d)"
         echo "当前时间: $(date +%H%M%S)"
