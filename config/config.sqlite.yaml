@@ -1,0 +1,45 @@
+app:
+    name: 小胡测试系统
+    version: 1.0.0
+
+# 数据库配置 - SQLite版本
+database:
+    # 数据库类型: mysql 或 sqlite
+    type: sqlite
+    
+    # MySQL配置（当type=mysql时使用）
+    mysql:
+        charset: utf8mb4
+        dbname: your_database
+        host: localhost
+        maxidleconns: 20
+        maxopenconns: 100
+        password: your_password
+        port: 3306
+        tableprefix: xiaohus_
+        username: your_username
+    
+    # SQLite配置（当type=sqlite时使用）
+    sqlite:
+        # SQLite数据库文件路径
+        path: data/xiaohu_jobs.db
+        # 表前缀
+        tableprefix: xiaohus_
+        # 连接池配置（SQLite建议使用较小的连接池）
+        maxopenconns: 1
+        maxidleconns: 1
+        connmaxlifetime: 60
+
+logs:
+    zaplogdays: 3
+    zaplogswitch: true
+    zap_log_levels: ["info", "error", "warn"] # 可多选：debug/info/warn/error
+    gin_log_methods: [] # POST/GET
+
+server:
+    port: 36363
+
+service:
+    name: "XiaohuJobService"
+    display_name: "小胡专用定时任务系统QQ357341051"
+    description: "小胡专用跨平台任务调度服务" 

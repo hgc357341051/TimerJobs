@@ -1,0 +1,924 @@
+basePath: /
+definitions:
+  admins.AdminStatusRequest:
+    properties:
+      id:
+        type: integer
+      status:
+        type: integer
+    required:
+    - id
+    - status
+    type: object
+  admins.LoginRequest:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  admins.RegisterRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+      role:
+        type: string
+      username:
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  admins.UpdateProfileRequest:
+    properties:
+      email:
+        type: string
+      role:
+        type: string
+    type: object
+  function.JsonData:
+    properties:
+      code:
+        type: integer
+      data: {}
+      msg:
+        type: string
+    type: object
+  function.PageData:
+    properties:
+      code:
+        type: integer
+      data: {}
+      msg:
+        type: string
+      page:
+        type: integer
+      page_size:
+        type: integer
+      pages_total:
+        type: integer
+      total:
+        type: integer
+    type: object
+  index.IPRequest:
+    properties:
+      ip:
+        type: string
+    required:
+    - ip
+    type: object
+  index.JobEditRequest:
+    properties:
+      allow_mode:
+        type: integer
+      command:
+        type: string
+      cron_expr:
+        type: string
+      desc:
+        type: string
+      id:
+        type: integer
+      max_run_count:
+        type: integer
+      mode:
+        type: string
+      name:
+        type: string
+      state:
+        type: integer
+    required:
+    - id
+    type: object
+  index.JobLogsRequest:
+    properties:
+      date:
+        type: string
+      id:
+        type: integer
+      limit:
+        type: integer
+      page:
+        type: integer
+      size:
+        type: integer
+    required:
+    - id
+    type: object
+  index.JobRequest:
+    properties:
+      allow_mode:
+        type: integer
+      command:
+        type: string
+      cron_expr:
+        type: string
+      desc:
+        type: string
+      id:
+        type: integer
+      max_run_count:
+        type: integer
+      mode:
+        type: string
+      name:
+        type: string
+      page:
+        type: integer
+      size:
+        type: integer
+      state:
+        type: integer
+    type: object
+  index.JobRunRequest:
+    properties:
+      id:
+        type: integer
+    required:
+    - id
+    type: object
+  jobs.Jobs:
+    properties:
+      allow_mode:
+        description: 0默认并行 1串行 2立即执行
+        type: integer
+      command:
+        type: string
+      created_at:
+        type: string
+      cron_expr:
+        type: string
+      desc:
+        type: string
+      id:
+        description: 主键ID
+        type: integer
+      max_run_count:
+        description: 0=无限制
+        type: integer
+      mode:
+        description: http/command/func
+        type: string
+      name:
+        type: string
+      run_count:
+        type: integer
+      state:
+        description: 0等待 1执行中 2停止
+        type: integer
+      updated_at:
+        type: string
+    type: object
+host: localhost:36363
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: 企业级定时任务管理系统，提供完整的任务调度、执行、监控功能。
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: 小胡定时任务系统 API
+  version: 1.0.0
+paths:
+  /:
+    get:
+      consumes:
+      - application/json
+      description: 系统首页
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 欢迎信息
+          schema:
+            $ref: '#/definitions/function.JsonData'
+      summary: 首页
+      tags:
+      - 系统
+  /admin/delete:
+    post:
+      consumes:
+      - application/json
+      description: 删除指定管理员
+      parameters:
+      - description: 管理员ID
+        in: query
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 删除成功
+          schema:
+            $ref: '#/definitions/function.JsonData'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/function.JsonData'
+      summary: 删除管理员
+      tags:
+      - 管理员
+  /admin/list:
+    get:
+      consumes:
+      - application/json
+      description: 分页获取管理员列表
+      parameters:
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: 每页数量
+        in: query
+        name: size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 分页数据
+          schema:
+            $ref: '#/definitions/function.PageData'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/function.JsonData'
+      summary: 管理员列表
+      tags:
+      - 管理员
+  /admin/login:
+    post:
+      consumes:
+      - application/json
+      description: 管理员登录接口
+      parameters:
+      - description: 登录参数
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/admins.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 登录成功
+          schema:
+            $ref: '#/definitions/function.JsonData'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/function.JsonData'
+        "401":
+          description: 用户名或密码错误
+          schema:
+            $ref: '#/definitions/function.JsonData'
+      summary: 管理员登录
+      tags:
+      - 管理员
+  /admin/profile:
+    get:
+      consumes:
+      - application/json
+      description: 获取当前登录用户的信息
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 获取成功
+          schema:
+            $ref: '#/definitions/function.JsonData'
+      security:
+      - BearerAuth: []
+      summary: 获取当前用户信息
+      tags:
+      - 管理员
+    post:
+      consumes:
+      - application/json
+      description: 更新当前登录用户的信息
+      parameters:
+      - description: 更新参数
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/admins.UpdateProfileRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 更新成功
+          schema:
+            $ref: '#/definitions/function.JsonData'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/function.JsonData'
+      security:
+      - BearerAuth: []
+      summary: 更新用户信息
+      tags:
+      - 管理员
+  /admin/register:
+    post:
+      consumes:
+      - application/json
+      description: 注册新的管理员账户
+      parameters:
+      - description: 注册参数
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/admins.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 注册成功
+          schema:
+            $ref: '#/definitions/function.JsonData'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/function.JsonData'
+      summary: 管理员注册
+      tags:
+      - 管理员
+  /admin/status:
+    post:
+      consumes:
+      - application/json
+      description: 启用/禁用管理员
+      parameters:
+      - description: 状态参数
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/admins.AdminStatusRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 操作成功
+          schema:
+            $ref: '#/definitions/function.JsonData'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/function.JsonData'
+      summary: 修改管理员状态
+      tags:
+      - 管理员
+  /jobs/add:
+    post:
+      consumes:
+      - application/json
+      description: 新增一个定时任务
+      parameters:
+      - description: 任务参数
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/index.JobRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 操作成功
+          schema:
+            $ref: '#/definitions/function.JsonData'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/function.JsonData'
+      summary: 新增任务
+      tags:
+      - 任务管理
+  /jobs/checkJob:
+    post:
+      consumes:
+      - application/json
+      description: 校准任务列表
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功响应
+          schema:
+            $ref: '#/definitions/function.JsonData'
+      summary: 校准任务列表
+      tags:
+      - 任务管理
+  /jobs/del:
+    post:
+      consumes:
+      - application/json
+      description: 根据ID删除指定任务
+      parameters:
+      - description: 任务ID
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/index.JobRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 操作成功
+          schema:
+            $ref: '#/definitions/function.JsonData'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/function.JsonData'
+      summary: 删除任务
+      tags:
+      - 任务管理
+  /jobs/edit:
+    post:
+      consumes:
+      - application/json
+      description: 编辑指定任务的信息
+      parameters:
+      - description: 任务编辑参数
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/index.JobEditRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 操作成功
+          schema:
+            $ref: '#/definitions/function.JsonData'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/function.JsonData'
+      summary: 编辑任务
+      tags:
+      - 任务管理
+  /jobs/functions:
+    get:
+      consumes:
+      - application/json
+      description: 获取系统中所有可用的函数任务列表
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功响应
+          schema:
+            $ref: '#/definitions/function.JsonData'
+      summary: 获取可用函数列表
+      tags:
+      - 任务管理
+  /jobs/health:
+    get:
+      consumes:
+      - application/json
+      description: 检查系统运行状态
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功响应
+          schema:
+            $ref: '#/definitions/function.JsonData'
+      summary: 系统健康检查
+      tags:
+      - 系统状态
+  /jobs/ip-control/blacklist/add:
+    post:
+      consumes:
+      - application/json
+      description: 添加IP到黑名单
+      parameters:
+      - description: IP参数
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/index.IPRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 操作成功
+          schema:
+            $ref: '#/definitions/function.JsonData'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/function.JsonData'
+      summary: 添加IP到黑名单
+      tags:
+      - IP管理
+  /jobs/ip-control/blacklist/remove:
+    post:
+      consumes:
+      - application/json
+      description: 从黑名单移除指定IP
+      parameters:
+      - description: IP参数
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/index.IPRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 操作成功
+          schema:
+            $ref: '#/definitions/function.JsonData'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/function.JsonData'
+      summary: 从黑名单移除IP
+      tags:
+      - IP管理
+  /jobs/ip-control/status:
+    get:
+      consumes:
+      - application/json
+      description: 获取IP白名单和黑名单配置状态
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功响应
+          schema:
+            $ref: '#/definitions/function.JsonData'
+      summary: 获取IP控制状态
+      tags:
+      - IP控制
+  /jobs/ip-control/whitelist/add:
+    post:
+      consumes:
+      - application/json
+      description: 添加IP到白名单
+      parameters:
+      - description: IP参数
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/index.IPRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 操作成功
+          schema:
+            $ref: '#/definitions/function.JsonData'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/function.JsonData'
+      summary: 添加IP到白名单
+      tags:
+      - IP管理
+  /jobs/ip-control/whitelist/remove:
+    post:
+      consumes:
+      - application/json
+      description: 从白名单移除指定IP
+      parameters:
+      - description: IP参数
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/index.IPRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 操作成功
+          schema:
+            $ref: '#/definitions/function.JsonData'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/function.JsonData'
+      summary: 从白名单移除IP
+      tags:
+      - IP管理
+  /jobs/jobState:
+    get:
+      consumes:
+      - application/json
+      description: 查询任务调度器运行状态
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功响应
+          schema:
+            $ref: '#/definitions/function.JsonData'
+      summary: 查询任务状态
+      tags:
+      - 任务管理
+  /jobs/list:
+    get:
+      consumes:
+      - application/json
+      description: 分页查询任务列表
+      parameters:
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: 每页数量
+        in: query
+        name: size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 分页数据
+          schema:
+            $ref: '#/definitions/function.PageData'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/function.JsonData'
+      summary: 获取任务列表
+      tags:
+      - 任务管理
+  /jobs/logs:
+    post:
+      consumes:
+      - application/json
+      description: 按任务ID和日期查询任务日志，默认返回最新3条
+      parameters:
+      - description: 日志查询参数
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/index.JobLogsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 查询成功
+          schema:
+            $ref: '#/definitions/function.JsonData'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/function.JsonData'
+      summary: 查询任务日志
+      tags:
+      - 日志管理
+  /jobs/read:
+    get:
+      consumes:
+      - application/json
+      description: 根据ID查询任务详情
+      parameters:
+      - description: 任务ID
+        in: query
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 任务详情
+          schema:
+            $ref: '#/definitions/jobs.Jobs'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/function.JsonData'
+      summary: 查询任务详情
+      tags:
+      - 任务管理
+  /jobs/reload-config:
+    post:
+      consumes:
+      - application/json
+      description: 重新加载配置文件并更新全局配置
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功响应
+          schema:
+            $ref: '#/definitions/function.JsonData'
+        "500":
+          description: 重载失败
+          schema:
+            $ref: '#/definitions/function.JsonData'
+      summary: 重载配置
+      tags:
+      - 系统管理
+  /jobs/restart:
+    post:
+      consumes:
+      - application/json
+      description: 根据任务ID重启任务
+      parameters:
+      - description: 请求体，格式为{id:1}
+        in: body
+        name: data
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 任务重启成功
+          schema:
+            $ref: '#/definitions/function.JsonData'
+        "404":
+          description: 任务未找到
+          schema:
+            $ref: '#/definitions/function.JsonData'
+      summary: 重启任务
+      tags:
+      - 任务管理
+  /jobs/run:
+    post:
+      consumes:
+      - application/json
+      description: 手动运行指定任务
+      parameters:
+      - description: 任务ID
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/index.JobRunRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 操作成功
+          schema:
+            $ref: '#/definitions/function.JsonData'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/function.JsonData'
+      summary: 手动运行任务
+      tags:
+      - 任务管理
+  /jobs/runAll:
+    post:
+      consumes:
+      - application/json
+      description: 启动任务调度器运行所有任务
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功响应
+          schema:
+            $ref: '#/definitions/function.JsonData'
+      summary: 启动所有任务
+      tags:
+      - 任务管理
+  /jobs/scheduler:
+    get:
+      consumes:
+      - application/json
+      description: 获取当前调度器中正在运行的任务列表
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功响应
+          schema:
+            $ref: '#/definitions/function.JsonData'
+        "404":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/function.JsonData'
+      summary: 获取调度器任务列表
+      tags:
+      - 任务管理
+  /jobs/stop:
+    post:
+      consumes:
+      - application/json
+      description: 停止正在运行的任务
+      parameters:
+      - description: 任务ID
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/index.JobRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 操作成功
+          schema:
+            $ref: '#/definitions/function.JsonData'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/function.JsonData'
+        "404":
+          description: 任务未找到
+          schema:
+            $ref: '#/definitions/function.JsonData'
+      summary: 停止任务
+      tags:
+      - 任务管理
+  /jobs/stopAll:
+    post:
+      consumes:
+      - application/json
+      description: 停止任务调度器所有任务
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功响应
+          schema:
+            $ref: '#/definitions/function.JsonData'
+      summary: 停止所有任务
+      tags:
+      - 任务管理
+  /jobs/switchState:
+    get:
+      consumes:
+      - application/json
+      description: 获取系统日志开关状态
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功响应
+          schema:
+            $ref: '#/definitions/function.JsonData'
+      summary: 获取日志开关状态
+      tags:
+      - 日志管理
+  /jobs/zapLogs:
+    get:
+      consumes:
+      - application/json
+      description: 分页查询系统运行日志
+      parameters:
+      - description: 查询日期(格式:YYYY-MM-DD)
+        in: query
+        name: date
+        type: string
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: 每页数量
+        in: query
+        name: size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功响应
+          schema:
+            $ref: '#/definitions/function.PageData'
+        "404":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/function.JsonData'
+      summary: 查看系统日志
+      tags:
+      - 日志管理
+swagger: "2.0"

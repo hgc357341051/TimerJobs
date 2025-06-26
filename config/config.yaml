@@ -1,0 +1,70 @@
+app:
+    name: 小胡测试系统
+    version: 1.0.0
+
+# 数据库配置
+# type: sqlite（推荐开发/单机） | mysql（推荐生产，需用环境变量覆盖）
+database:
+    type: sqlite  # sqlite 或 mysql
+    
+    # MySQL配置（生产环境建议用环境变量覆盖下方默认值）
+    mysql:
+        host: 127.0.0.1
+        port: 3306
+        username: root
+        password: root123456
+        dbname: xiaohu_jobs
+        charset: utf8mb4
+        tableprefix: xiaohus_
+        maxopenconns: 100
+        maxidleconns: 20
+    
+    # SQLite配置（推荐开发/单机，data 目录自动挂载）
+    sqlite:
+        path: data/xiaohu_jobs.db
+        tableprefix: xiaohus_
+        maxopenconns: 1
+        maxidleconns: 1
+
+logs:
+    zaplogdays: 3
+    zaplogswitch: true
+    zap_log_levels: ["info","error", "warn"] # 可多选:debug/info/warn/error
+    gin_log_methods: [] # POST/GET
+
+server:
+    port: 36363
+
+# IP访问控制配置
+ip_control:
+    enabled: true                    # 是否启用IP控制
+    whitelist:                       # IP白名单（优先级高）
+        - "127.0.0.1"
+        - "::1"
+    blacklist:                       # IP黑名单
+        # 黑名单可为空，因白名单模式会自动拒绝不在白名单中的IP
+    # 注意：白名单优先级高于黑名单，如在白名单中则跳过黑名单检查
+
+service:
+    name: "XiaohuJobService"
+    display_name: "小胡专用定时任务系统QQ357341051"
+    description: "小胡专用跨平台任务调度服务"
+
+daemon:
+    max_restarts: 10      # 守护进程最大重启次数
+    restart_delay: 5      # 重启间隔（秒）
+
+job_log_keep_count: 3
+
+# 生产环境建议用环境变量覆盖敏感配置，如：
+#   DATABASE_TYPE=mysql
+#   DATABASE_MYSQL_HOST=mysql
+#   DATABASE_MYSQL_PORT=3306
+#   DATABASE_MYSQL_USERNAME=xiaohu
+#   DATABASE_MYSQL_PASSWORD=xiaohu123
+#   DATABASE_MYSQL_DBNAME=xiaohu_jobs
+#   DATABASE_MYSQL_CHARSET=utf8mb4
+#   DATABASE_MYSQL_TABLEPREFIX=xiaohus_
+#   DATABASE_MYSQL_MAXOPENCONNS=100
+#   DATABASE_MYSQL_MAXIDLECONNS=20
+        

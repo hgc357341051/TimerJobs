@@ -1,0 +1,1411 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "企业级定时任务管理系统，提供完整的任务调度、执行、监控功能。",
+        "title": "小胡定时任务系统 API",
+        "termsOfService": "http://swagger.io/terms/",
+        "contact": {
+            "name": "API Support",
+            "url": "http://www.swagger.io/support",
+            "email": "support@swagger.io"
+        },
+        "license": {
+            "name": "Apache 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
+        },
+        "version": "1.0.0"
+    },
+    "host": "localhost:36363",
+    "basePath": "/",
+    "paths": {
+        "/": {
+            "get": {
+                "description": "系统首页",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "系统"
+                ],
+                "summary": "首页",
+                "responses": {
+                    "200": {
+                        "description": "欢迎信息",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/delete": {
+            "post": {
+                "description": "删除指定管理员",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "管理员"
+                ],
+                "summary": "删除管理员",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "管理员ID",
+                        "name": "id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "删除成功",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/list": {
+            "get": {
+                "description": "分页获取管理员列表",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "管理员"
+                ],
+                "summary": "管理员列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "每页数量",
+                        "name": "size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "分页数据",
+                        "schema": {
+                            "$ref": "#/definitions/function.PageData"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/login": {
+            "post": {
+                "description": "管理员登录接口",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "管理员"
+                ],
+                "summary": "管理员登录",
+                "parameters": [
+                    {
+                        "description": "登录参数",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/admins.LoginRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "登录成功",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    },
+                    "401": {
+                        "description": "用户名或密码错误",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/profile": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取当前登录用户的信息",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "管理员"
+                ],
+                "summary": "获取当前用户信息",
+                "responses": {
+                    "200": {
+                        "description": "获取成功",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "更新当前登录用户的信息",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "管理员"
+                ],
+                "summary": "更新用户信息",
+                "parameters": [
+                    {
+                        "description": "更新参数",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/admins.UpdateProfileRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "更新成功",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/register": {
+            "post": {
+                "description": "注册新的管理员账户",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "管理员"
+                ],
+                "summary": "管理员注册",
+                "parameters": [
+                    {
+                        "description": "注册参数",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/admins.RegisterRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "注册成功",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/status": {
+            "post": {
+                "description": "启用/禁用管理员",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "管理员"
+                ],
+                "summary": "修改管理员状态",
+                "parameters": [
+                    {
+                        "description": "状态参数",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/admins.AdminStatusRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "操作成功",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    }
+                }
+            }
+        },
+        "/jobs/add": {
+            "post": {
+                "description": "新增一个定时任务",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "任务管理"
+                ],
+                "summary": "新增任务",
+                "parameters": [
+                    {
+                        "description": "任务参数",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/index.JobRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "操作成功",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    }
+                }
+            }
+        },
+        "/jobs/checkJob": {
+            "post": {
+                "description": "校准任务列表",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "任务管理"
+                ],
+                "summary": "校准任务列表",
+                "responses": {
+                    "200": {
+                        "description": "成功响应",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    }
+                }
+            }
+        },
+        "/jobs/del": {
+            "post": {
+                "description": "根据ID删除指定任务",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "任务管理"
+                ],
+                "summary": "删除任务",
+                "parameters": [
+                    {
+                        "description": "任务ID",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/index.JobRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "操作成功",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    }
+                }
+            }
+        },
+        "/jobs/edit": {
+            "post": {
+                "description": "编辑指定任务的信息",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "任务管理"
+                ],
+                "summary": "编辑任务",
+                "parameters": [
+                    {
+                        "description": "任务编辑参数",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/index.JobEditRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "操作成功",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    }
+                }
+            }
+        },
+        "/jobs/functions": {
+            "get": {
+                "description": "获取系统中所有可用的函数任务列表",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "任务管理"
+                ],
+                "summary": "获取可用函数列表",
+                "responses": {
+                    "200": {
+                        "description": "成功响应",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    }
+                }
+            }
+        },
+        "/jobs/health": {
+            "get": {
+                "description": "检查系统运行状态",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "系统状态"
+                ],
+                "summary": "系统健康检查",
+                "responses": {
+                    "200": {
+                        "description": "成功响应",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    }
+                }
+            }
+        },
+        "/jobs/ip-control/blacklist/add": {
+            "post": {
+                "description": "添加IP到黑名单",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "IP管理"
+                ],
+                "summary": "添加IP到黑名单",
+                "parameters": [
+                    {
+                        "description": "IP参数",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/index.IPRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "操作成功",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    }
+                }
+            }
+        },
+        "/jobs/ip-control/blacklist/remove": {
+            "post": {
+                "description": "从黑名单移除指定IP",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "IP管理"
+                ],
+                "summary": "从黑名单移除IP",
+                "parameters": [
+                    {
+                        "description": "IP参数",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/index.IPRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "操作成功",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    }
+                }
+            }
+        },
+        "/jobs/ip-control/status": {
+            "get": {
+                "description": "获取IP白名单和黑名单配置状态",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "IP控制"
+                ],
+                "summary": "获取IP控制状态",
+                "responses": {
+                    "200": {
+                        "description": "成功响应",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    }
+                }
+            }
+        },
+        "/jobs/ip-control/whitelist/add": {
+            "post": {
+                "description": "添加IP到白名单",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "IP管理"
+                ],
+                "summary": "添加IP到白名单",
+                "parameters": [
+                    {
+                        "description": "IP参数",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/index.IPRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "操作成功",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    }
+                }
+            }
+        },
+        "/jobs/ip-control/whitelist/remove": {
+            "post": {
+                "description": "从白名单移除指定IP",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "IP管理"
+                ],
+                "summary": "从白名单移除IP",
+                "parameters": [
+                    {
+                        "description": "IP参数",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/index.IPRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "操作成功",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    }
+                }
+            }
+        },
+        "/jobs/jobState": {
+            "get": {
+                "description": "查询任务调度器运行状态",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "任务管理"
+                ],
+                "summary": "查询任务状态",
+                "responses": {
+                    "200": {
+                        "description": "成功响应",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    }
+                }
+            }
+        },
+        "/jobs/list": {
+            "get": {
+                "description": "分页查询任务列表",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "任务管理"
+                ],
+                "summary": "获取任务列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "每页数量",
+                        "name": "size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "分页数据",
+                        "schema": {
+                            "$ref": "#/definitions/function.PageData"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    }
+                }
+            }
+        },
+        "/jobs/logs": {
+            "post": {
+                "description": "按任务ID和日期查询任务日志，默认返回最新3条",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "日志管理"
+                ],
+                "summary": "查询任务日志",
+                "parameters": [
+                    {
+                        "description": "日志查询参数",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/index.JobLogsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "查询成功",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    }
+                }
+            }
+        },
+        "/jobs/read": {
+            "get": {
+                "description": "根据ID查询任务详情",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "任务管理"
+                ],
+                "summary": "查询任务详情",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "任务ID",
+                        "name": "id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "任务详情",
+                        "schema": {
+                            "$ref": "#/definitions/jobs.Jobs"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    }
+                }
+            }
+        },
+        "/jobs/reload-config": {
+            "post": {
+                "description": "重新加载配置文件并更新全局配置",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "系统管理"
+                ],
+                "summary": "重载配置",
+                "responses": {
+                    "200": {
+                        "description": "成功响应",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    },
+                    "500": {
+                        "description": "重载失败",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    }
+                }
+            }
+        },
+        "/jobs/restart": {
+            "post": {
+                "description": "根据任务ID重启任务",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "任务管理"
+                ],
+                "summary": "重启任务",
+                "parameters": [
+                    {
+                        "description": "请求体，格式为{id:1}",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "任务重启成功",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    },
+                    "404": {
+                        "description": "任务未找到",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    }
+                }
+            }
+        },
+        "/jobs/run": {
+            "post": {
+                "description": "手动运行指定任务",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "任务管理"
+                ],
+                "summary": "手动运行任务",
+                "parameters": [
+                    {
+                        "description": "任务ID",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/index.JobRunRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "操作成功",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    }
+                }
+            }
+        },
+        "/jobs/runAll": {
+            "post": {
+                "description": "启动任务调度器运行所有任务",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "任务管理"
+                ],
+                "summary": "启动所有任务",
+                "responses": {
+                    "200": {
+                        "description": "成功响应",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    }
+                }
+            }
+        },
+        "/jobs/scheduler": {
+            "get": {
+                "description": "获取当前调度器中正在运行的任务列表",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "任务管理"
+                ],
+                "summary": "获取调度器任务列表",
+                "responses": {
+                    "200": {
+                        "description": "成功响应",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    },
+                    "404": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    }
+                }
+            }
+        },
+        "/jobs/stop": {
+            "post": {
+                "description": "停止正在运行的任务",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "任务管理"
+                ],
+                "summary": "停止任务",
+                "parameters": [
+                    {
+                        "description": "任务ID",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/index.JobRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "操作成功",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    },
+                    "404": {
+                        "description": "任务未找到",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    }
+                }
+            }
+        },
+        "/jobs/stopAll": {
+            "post": {
+                "description": "停止任务调度器所有任务",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "任务管理"
+                ],
+                "summary": "停止所有任务",
+                "responses": {
+                    "200": {
+                        "description": "成功响应",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    }
+                }
+            }
+        },
+        "/jobs/switchState": {
+            "get": {
+                "description": "获取系统日志开关状态",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "日志管理"
+                ],
+                "summary": "获取日志开关状态",
+                "responses": {
+                    "200": {
+                        "description": "成功响应",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    }
+                }
+            }
+        },
+        "/jobs/zapLogs": {
+            "get": {
+                "description": "分页查询系统运行日志",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "日志管理"
+                ],
+                "summary": "查看系统日志",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "查询日期(格式:YYYY-MM-DD)",
+                        "name": "date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "每页数量",
+                        "name": "size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功响应",
+                        "schema": {
+                            "$ref": "#/definitions/function.PageData"
+                        }
+                    },
+                    "404": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/function.JsonData"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "admins.AdminStatusRequest": {
+            "type": "object",
+            "required": [
+                "id",
+                "status"
+            ],
+            "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "integer"
+                }
+            }
+        },
+        "admins.LoginRequest": {
+            "type": "object",
+            "required": [
+                "password",
+                "username"
+            ],
+            "properties": {
+                "password": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "admins.RegisterRequest": {
+            "type": "object",
+            "required": [
+                "password",
+                "username"
+            ],
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string"
+                },
+                "role": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "admins.UpdateProfileRequest": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "role": {
+                    "type": "string"
+                }
+            }
+        },
+        "function.JsonData": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "data": {},
+                "msg": {
+                    "type": "string"
+                }
+            }
+        },
+        "function.PageData": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "data": {},
+                "msg": {
+                    "type": "string"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "pages_total": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "index.IPRequest": {
+            "type": "object",
+            "required": [
+                "ip"
+            ],
+            "properties": {
+                "ip": {
+                    "type": "string"
+                }
+            }
+        },
+        "index.JobEditRequest": {
+            "type": "object",
+            "required": [
+                "id"
+            ],
+            "properties": {
+                "allow_mode": {
+                    "type": "integer"
+                },
+                "command": {
+                    "type": "string"
+                },
+                "cron_expr": {
+                    "type": "string"
+                },
+                "desc": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "max_run_count": {
+                    "type": "integer"
+                },
+                "mode": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "integer"
+                }
+            }
+        },
+        "index.JobLogsRequest": {
+            "type": "object",
+            "required": [
+                "id"
+            ],
+            "properties": {
+                "date": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "size": {
+                    "type": "integer"
+                }
+            }
+        },
+        "index.JobRequest": {
+            "type": "object",
+            "properties": {
+                "allow_mode": {
+                    "type": "integer"
+                },
+                "command": {
+                    "type": "string"
+                },
+                "cron_expr": {
+                    "type": "string"
+                },
+                "desc": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "max_run_count": {
+                    "type": "integer"
+                },
+                "mode": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "size": {
+                    "type": "integer"
+                },
+                "state": {
+                    "type": "integer"
+                }
+            }
+        },
+        "index.JobRunRequest": {
+            "type": "object",
+            "required": [
+                "id"
+            ],
+            "properties": {
+                "id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "jobs.Jobs": {
+            "type": "object",
+            "properties": {
+                "allow_mode": {
+                    "description": "0默认并行 1串行 2立即执行",
+                    "type": "integer"
+                },
+                "command": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "cron_expr": {
+                    "type": "string"
+                },
+                "desc": {
+                    "type": "string"
+                },
+                "id": {
+                    "description": "主键ID",
+                    "type": "integer"
+                },
+                "max_run_count": {
+                    "description": "0=无限制",
+                    "type": "integer"
+                },
+                "mode": {
+                    "description": "http/command/func",
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "run_count": {
+                    "type": "integer"
+                },
+                "state": {
+                    "description": "0等待 1执行中 2停止",
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        }
+    }
+}

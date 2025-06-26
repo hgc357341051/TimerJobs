@@ -1,0 +1,90 @@
+version: '3.8'
+
+services:
+  # 主服务，默认用 SQLite，传递下方环境变量即可切换到 MySQL
+  jobs:
+    build: .
+    container_name: xiaohu-jobs
+    restart: unless-stopped
+    working_dir: /app
+    command: ["./main", "start", "-d", "-f"]
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config:/app/config
+      - ./runtime:/app/runtime
+      - ./data:/app/data
+      - ./logs:/app/logs
+    environment:
+      - TZ=Asia/Shanghai
+      - GIN_MODE=release
+      # === 切换到 MySQL 时请取消下方注释 ===
+      # - DATABASE_TYPE=mysql
+      # - DATABASE_MYSQL_HOST=mysql
+      # - DATABASE_MYSQL_PORT=3306
+      # - DATABASE_MYSQL_USERNAME=xiaohu
+      # - DATABASE_MYSQL_PASSWORD=xiaohu123
+      # - DATABASE_MYSQL_DBNAME=xiaohu_jobs
+      # - DATABASE_MYSQL_CHARSET=utf8mb4
+      # - DATABASE_MYSQL_TABLEPREFIX=xiaohus_
+      # - DATABASE_MYSQL_MAXOPENCONNS=100
+      # - DATABASE_MYSQL_MAXIDLECONNS=20
+    networks:
+      - xiaohu-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/jobs/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      - mysql
+
+  # MySQL 服务（如需用 MySQL，jobs 的 host 要写 mysql）
+  mysql:
+    image: mysql:8.0
+    container_name: xiaohu-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root123456
+      MYSQL_DATABASE: xiaohu_jobs
+      MYSQL_USER: xiaohu
+      MYSQL_PASSWORD: xiaohu123
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - xiaohu-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+
+
+  # 如需 Nginx，取消注释
+  # nginx:
+  #   image: nginx:alpine
+  #   container_name: xiaohu-nginx
+  #   restart: unless-stopped
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf
+  #     - ./docker/nginx/ssl:/etc/nginx/ssl
+  #   depends_on:
+  #     - jobs
+  #   networks:
+  #     - xiaohu-network
+
+volumes:
+  mysql_data:
+    driver: local
+  # redis_data:
+  #   driver: local
+
+networks:
+  xiaohu-network:
+    driver: bridge 
