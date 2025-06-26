@@ -50,7 +50,7 @@ jobs/
 ### 安装与运行
 ```bash
 # 克隆项目
- git clone <repo-url>
+ git clone https://github.com/hgc357341051/TimerJobs.git
  cd jobs
 # 安装依赖
 go mod tidy
@@ -65,21 +65,14 @@ go mod tidy
 - 支持热更新：修改配置后可通过API或重启服务生效。
 
 ### 主要API入口
-- Swagger文档：http://localhost:8080/swagger/index.html
-- 健康检查：http://localhost:8080/jobs/health
-- 任务状态：http://localhost:8080/jobs/jobStatus
+- Swagger文档：http://127.0.0.1:36363/swagger/index.html
+- 健康检查：http://127.0.0.1:36363/jobs/health
+- 任务状态：http://127.0.0.1:36363/jobs/jobStatus
 
 ---
 
 ## 主要功能与接口
 
-### 管理员相关
-- `/admin/login` 登录
-- `/admin/register` 注册
-- `/admin/profile` 获取/更新个人信息
-- `/admin/list` 管理员列表
-- `/admin/status` 修改状态
-- `/admin/delete` 删除管理员
 
 ### 任务管理
 - `/jobs/add` 新增任务
@@ -101,7 +94,15 @@ go mod tidy
 - `/jobs/ip-control/status` 查询IP控制状态
 - `/jobs/ip-control/whitelist/add|remove` 白名单管理
 - `/jobs/ip-control/blacklist/add|remove` 黑名单管理
+- `/jobs/ip-control/status` 获取IP控制状态
 
+### 管理员相关（暂时无用）
+- `/admin/login` 登录
+- `/admin/register` 注册
+- `/admin/profile` 获取/更新个人信息
+- `/admin/list` 管理员列表
+- `/admin/status` 修改状态
+- `/admin/delete` 删除管理员
 ---
 
 ## 业务开发规范
@@ -148,8 +149,8 @@ RUN apk --no-cache add ca-certificates
 WORKDIR /root/
 COPY --from=builder /app/main .
 COPY --from=builder /app/config ./config
-EXPOSE 8080
-CMD ["./main"]
+EXPOSE 36363
+CMD ["./main","start"]
 ```
 
 ### Systemd 服务
