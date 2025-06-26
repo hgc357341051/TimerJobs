@@ -17,29 +17,6 @@ jobs:
       contents: write
       packages: write
       actions: read
-    strategy:
-      matrix:
-        platform:
-          - name: linux-amd64
-            os: linux
-            arch: amd64
-            ext: ''
-          - name: linux-arm64
-            os: linux
-            arch: arm64
-            ext: ''
-          - name: windows-amd64
-            os: windows
-            arch: amd64
-            ext: '.exe'
-          - name: darwin-amd64
-            os: darwin
-            arch: amd64
-            ext: ''
-          - name: darwin-arm64
-            os: darwin
-            arch: arm64
-            ext: ''
     
     steps:
     - name: 检出代码
@@ -61,11 +38,41 @@ jobs:
       
     - name: 构建多平台二进制文件
       run: |
-        echo "构建 ${{ matrix.platform.name }}..."
-        GOOS=${{ matrix.platform.os }} GOARCH=${{ matrix.platform.arch }} \
-        go build -v -ldflags="-s -w -X main.Version=${{ github.ref_name }}" \
-        -o ${{ env.PROJECT_NAME }}-${{ matrix.platform.name }}${{ matrix.platform.ext }} main.go
-        echo "✅ ${{ matrix.platform.name }} 构建完成"
+        echo "开始构建多平台二进制文件..."
+        
+        # 定义构建平台
+        PLATFORMS=(
+          "linux/amd64"
+          "linux/arm64"
+          "windows/amd64"
+          "darwin/amd64"
+          "darwin/arm64"
+        )
+        
+        # 为每个平台构建
+        for platform in "${PLATFORMS[@]}"; do
+          IFS='/' read -r os arch <<< "$platform"
+          
+          # 设置文件扩展名
+          ext=""
+          if [ "$os" = "windows" ]; then
+            ext=".exe"
+          fi
+          
+          # 构建文件名
+          filename="${{ env.PROJECT_NAME }}-${os}-${arch}${ext}"
+          
+          echo "构建 $filename..."
+          GOOS=$os GOARCH=$arch \
+          go build -v -ldflags="-s -w -X main.Version=${{ github.ref_name }}" \
+          -o "$filename" main.go
+          
+          echo "✅ $filename 构建完成 ($(du -h "$filename" | cut -f1))"
+        done
+        
+        echo "所有平台构建完成！"
+        echo "构建的文件:"
+        ls -lh ${{ env.PROJECT_NAME }}-*
         
     - name: 生成 Swagger 文档
       run: |
@@ -81,7 +88,7 @@ jobs:
         RELEASE_DIR="release-${VERSION}"
         mkdir -p ${RELEASE_DIR}
         
-        # 复制二进制文件
+        # 复制所有二进制文件
         echo "复制二进制文件..."
         cp ${{ env.PROJECT_NAME }}-* ${RELEASE_DIR}/ || echo "警告: 某些二进制文件可能不存在"
         
@@ -94,6 +101,9 @@ jobs:
         # 显示发布包内容
         echo "发布包内容:"
         ls -la ${RELEASE_DIR}/
+        echo ""
+        echo "二进制文件详情:"
+        ls -lh ${RELEASE_DIR}/${{ env.PROJECT_NAME }}-* || echo "没有找到二进制文件"
         
         # 创建压缩包
         echo "创建压缩包..."
@@ -103,6 +113,14 @@ jobs:
         echo "✅ 发布包创建完成"
         echo "压缩包大小:"
         ls -lh ${RELEASE_DIR}.*
+        
+        # 验证压缩包内容
+        echo "验证压缩包内容:"
+        echo "tar.gz 内容:"
+        tar -tzf ${RELEASE_DIR}.tar.gz | grep ${{ env.PROJECT_NAME }} || echo "没有找到二进制文件"
+        echo ""
+        echo "zip 内容:"
+        unzip -l ${RELEASE_DIR}.zip | grep ${{ env.PROJECT_NAME }} || echo "没有找到二进制文件"
         
     - name: 检查权限
       run: |
@@ -135,10 +153,15 @@ jobs:
           tar -xzf release-${{ github.ref_name }}.tar.gz
           cd release-${{ github.ref_name }}
           chmod +x xiaohu-jobs-*
-          ./xiaohu-jobs-linux-amd64  # 或对应的架构
+          
+          # 选择适合您系统的二进制文件:
+          # Linux x86_64: ./xiaohu-jobs-linux-amd64
+          # Linux ARM64:  ./xiaohu-jobs-linux-arm64
+          # macOS Intel:  ./xiaohu-jobs-darwin-amd64
+          # macOS Apple Silicon: ./xiaohu-jobs-darwin-arm64
           
           # Windows
-          # 解压 .zip 文件后运行 .exe 文件
+          # 解压 .zip 文件后运行 xiaohu-jobs-windows-amd64.exe
           ```
           
           ### 🏗️ 构建信息
@@ -151,9 +174,19 @@ jobs:
           - [使用说明](README.md)
           
           ### 🔍 支持平台
-          - Linux (amd64, arm64)
-          - Windows (amd64)
-          - macOS (amd64, arm64)
+          - **Linux**: amd64, arm64
+          - **Windows**: amd64
+          - **macOS**: amd64 (Intel), arm64 (Apple Silicon)
+          
+          ### 📁 包含文件
+          - `xiaohu-jobs-linux-amd64` - Linux x86_64
+          - `xiaohu-jobs-linux-arm64` - Linux ARM64
+          - `xiaohu-jobs-windows-amd64.exe` - Windows x86_64
+          - `xiaohu-jobs-darwin-amd64` - macOS Intel
+          - `xiaohu-jobs-darwin-arm64` - macOS Apple Silicon
+          - `docs/` - API 文档
+          - `README.md` - 使用说明
+          - `LICENSE` - 许可证文件
         draft: false
         prerelease: false
         generate_release_notes: true
