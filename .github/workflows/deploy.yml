@@ -15,7 +15,8 @@ env:
   VERSION_TAG: ${{ github.ref_name == 'main' && 'latest' || github.ref_name }}
   BUILD_TAG: ${{ github.run_number }}
   COMMIT_TAG: ${{ github.sha }}
-  DATE_TAG: ${{ format('YYYYMMDD-HHmmss', github.event.head_commit.timestamp) }}
+  # 使用 GitHub Actions 支持的日期格式
+  DATE_TAG: ${{ format('YYYYMMDD', github.event.head_commit.timestamp) }}
 
 jobs:
   # 构建和部署任务
@@ -112,36 +113,31 @@ jobs:
         # 基础镜像名称
         IMAGE_NAME="${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}"
         
-        # 生成各种标签
-        LATEST_TAG="${IMAGE_NAME}:latest"
+        # 生成时间标签
+        CURRENT_DATE=$(date +%Y%m%d)
+        CURRENT_TIME=$(date +%H%M%S)
+        TIME_TAG="${IMAGE_NAME}:${CURRENT_DATE}-${CURRENT_TIME}"
+        
+        # 生成版本标签
         VERSION_TAG="${IMAGE_NAME}:${{ env.VERSION_TAG }}"
         BUILD_TAG="${IMAGE_NAME}:v${{ env.BUILD_TAG }}"
-        COMMIT_TAG="${IMAGE_NAME}:${{ env.COMMIT_TAG }}"
-        DATE_TAG="${IMAGE_NAME}:${{ env.DATE_TAG }}"
         
         # 如果是发布版本，添加语义化版本标签
         if [[ "${{ github.ref }}" == refs/tags/* ]]; then
           VERSION="${GITHUB_REF#refs/tags/}"
           SEMVER_TAG="${IMAGE_NAME}:${VERSION}"
-          MAJOR_MINOR="${IMAGE_NAME}:${VERSION%.*}"
-          MAJOR="${IMAGE_NAME}:${VERSION%%.*}"
-          
           echo "semver_tag=${SEMVER_TAG}" >> $GITHUB_OUTPUT
-          echo "major_minor_tag=${MAJOR_MINOR}" >> $GITHUB_OUTPUT
-          echo "major_tag=${MAJOR}" >> $GITHUB_OUTPUT
         fi
         
-        # 输出所有标签
-        echo "latest_tag=${LATEST_TAG}" >> $GITHUB_OUTPUT
+        # 输出标签
         echo "version_tag=${VERSION_TAG}" >> $GITHUB_OUTPUT
         echo "build_tag=${BUILD_TAG}" >> $GITHUB_OUTPUT
-        echo "commit_tag=${COMMIT_TAG}" >> $GITHUB_OUTPUT
-        echo "date_tag=${DATE_TAG}" >> $GITHUB_OUTPUT
+        echo "time_tag=${TIME_TAG}" >> $GITHUB_OUTPUT
         
-        # 构建完整的标签列表
-        TAGS="${LATEST_TAG}\n${VERSION_TAG}\n${BUILD_TAG}\n${COMMIT_TAG}\n${DATE_TAG}"
+        # 构建标签列表
+        TAGS="${VERSION_TAG}\n${BUILD_TAG}\n${TIME_TAG}"
         if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-          TAGS="${TAGS}\n${SEMVER_TAG}\n${MAJOR_MINOR}\n${MAJOR}"
+          TAGS="${TAGS}\n${SEMVER_TAG}"
         fi
         
         echo "all_tags<<EOF" >> $GITHUB_OUTPUT
@@ -159,8 +155,8 @@ jobs:
         echo "IMAGE_NAME: ${{ env.IMAGE_NAME }}"
         echo "VERSION_TAG: ${{ env.VERSION_TAG }}"
         echo "BUILD_TAG: ${{ env.BUILD_TAG }}"
-        echo "COMMIT_TAG: ${{ env.COMMIT_TAG }}"
-        echo "DATE_TAG: ${{ env.DATE_TAG }}"
+        echo "当前日期: $(date +%Y%m%d)"
+        echo "当前时间: $(date +%H%M%S)"
         echo "生成的标签列表："
         echo "${{ steps.docker-tags.outputs.all_tags }}"
         echo "=== 调试信息结束 ==="
