@@ -82,18 +82,27 @@ jobs:
         mkdir -p ${RELEASE_DIR}
         
         # 复制二进制文件
-        cp ${{ env.PROJECT_NAME }}-* ${RELEASE_DIR}/
+        echo "复制二进制文件..."
+        cp ${{ env.PROJECT_NAME }}-* ${RELEASE_DIR}/ || echo "警告: 某些二进制文件可能不存在"
         
         # 复制文档
-        cp -r docs ${RELEASE_DIR}/
-        cp README.md ${RELEASE_DIR}/ || echo "README.md 不存在"
-        cp LICENSE ${RELEASE_DIR}/ || echo "LICENSE 不存在"
+        echo "复制文档..."
+        cp -r docs ${RELEASE_DIR}/ || echo "警告: docs 目录不存在"
+        cp README.md ${RELEASE_DIR}/ || echo "警告: README.md 不存在"
+        cp LICENSE ${RELEASE_DIR}/ || echo "警告: LICENSE 不存在"
+        
+        # 显示发布包内容
+        echo "发布包内容:"
+        ls -la ${RELEASE_DIR}/
         
         # 创建压缩包
+        echo "创建压缩包..."
         tar -czf ${RELEASE_DIR}.tar.gz ${RELEASE_DIR}/
         zip -r ${RELEASE_DIR}.zip ${RELEASE_DIR}/
         
         echo "✅ 发布包创建完成"
+        echo "压缩包大小:"
+        ls -lh ${RELEASE_DIR}.*
         
     - name: 检查权限
       run: |
@@ -102,9 +111,13 @@ jobs:
         echo "当前用户: ${{ github.actor }}"
         echo "仓库: ${{ github.repository }}"
         echo "标签: ${{ github.ref_name }}"
+        echo "事件类型: ${{ github.event_name }}"
         
     - name: 创建 GitHub Release
+      id: gh-release
       uses: softprops/action-gh-release@v1
+      continue-on-error: true
+      timeout-minutes: 10
       with:
         files: |
           release-${{ github.ref_name }}.tar.gz
@@ -145,4 +158,29 @@ jobs:
         prerelease: false
         generate_release_notes: true
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: 检查 Release 状态
+      if: always()
+      run: |
+        echo "Release 创建结果: ${{ steps.gh-release.outputs.result }}"
+        echo "Release URL: ${{ steps.gh-release.outputs.url }}"
+        echo "Release ID: ${{ steps.gh-release.outputs.id }}"
+        
+        if [ "${{ steps.gh-release.outputs.result }}" == "success" ]; then
+          echo "✅ GitHub Release 创建成功"
+          echo "Release URL: ${{ steps.gh-release.outputs.url }}"
+        else
+          echo "❌ GitHub Release 创建失败"
+          echo "请检查权限设置或手动创建 Release"
+        fi
+        
+    - name: 上传构建产物
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-files-${{ github.ref_name }}
+        path: |
+          release-${{ github.ref_name }}.tar.gz
+          release-${{ github.ref_name }}.zip
+        retention-days: 30 
