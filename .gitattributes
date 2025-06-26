@@ -1,0 +1,35 @@
+# 设置默认行为，如果未指定，Git 会自动处理行尾符
+* text=auto
+
+# 明确指定文本文件使用 LF
+*.go text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.txt text eol=lf
+*.sql text eol=lf
+*.sh text eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 二进制文件
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.db binary
+*.sqlite binary
+*.sqlite3 binary
+*.tar.gz binary
+*.zip binary
+*.rar binary
+*.7z binary
+*.pdf binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.bmp binary
+*.svg binary 

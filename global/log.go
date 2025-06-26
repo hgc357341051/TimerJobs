@@ -422,6 +422,9 @@ func LogSecurity(event, ip, user string, fields ...zap.Field) {
 // 确保所有日志都写入到磁盘
 func SyncLog() {
 	if ZapLog != nil {
-		ZapLog.Sync()
+		if err := ZapLog.Sync(); err != nil {
+			// 记录同步错误但不影响程序运行
+			fmt.Printf("日志同步失败: %v\n", err)
+		}
 	}
 }

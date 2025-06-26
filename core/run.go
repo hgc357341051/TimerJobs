@@ -201,8 +201,13 @@ func RunDaemon() {
 // writeJobPIDFile 写入业务进程PID到文件
 func writeJobPIDFile(pid int) {
 	dir := filepath.Dir(jobPidFile)
-	os.MkdirAll(dir, 0755)
-	os.WriteFile(jobPidFile, []byte(strconv.Itoa(pid)), 0644)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		fmt.Printf("创建PID文件目录失败: %v\n", err)
+		return
+	}
+	if err := os.WriteFile(jobPidFile, []byte(strconv.Itoa(pid)), 0644); err != nil {
+		fmt.Printf("写入PID文件失败: %v\n", err)
+	}
 }
 
 // readJobPIDFile 读取业务进程PID
@@ -224,8 +229,13 @@ func removeJobPIDFile() { os.Remove(jobPidFile) }
 // writeDaemonPIDFile 写入守护进程PID到文件
 func writeDaemonPIDFile(pid int) {
 	dir := filepath.Dir(daemonPidFile)
-	os.MkdirAll(dir, 0755)
-	os.WriteFile(daemonPidFile, []byte(strconv.Itoa(pid)), 0644)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		fmt.Printf("创建守护进程PID文件目录失败: %v\n", err)
+		return
+	}
+	if err := os.WriteFile(daemonPidFile, []byte(strconv.Itoa(pid)), 0644); err != nil {
+		fmt.Printf("写入守护进程PID文件失败: %v\n", err)
+	}
 }
 
 // readDaemonPIDFile 读取守护进程PID
@@ -302,12 +312,16 @@ func StopBackground() {
 func StopDaemon() {
 	jobPid := readJobPIDFile()
 	if jobPid != 0 {
-		killProcess(jobPid)
+		if err := killProcess(jobPid); err != nil {
+			fmt.Printf("停止业务进程失败: %v\n", err)
+		}
 		removeJobPIDFile()
 	}
 	daemonPid := readDaemonPIDFile()
 	if daemonPid != 0 {
-		killProcess(daemonPid)
+		if err := killProcess(daemonPid); err != nil {
+			fmt.Printf("停止守护进程失败: %v\n", err)
+		}
 		removeDaemonPIDFile()
 	}
 	fmt.Println("已优雅停止守护进程和业务进程")

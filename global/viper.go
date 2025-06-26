@@ -261,14 +261,24 @@ func GetDatabaseType() string {
 // 获取MySQL配置
 func GetMySQLConfig() *MySQLConfig {
 	var config MySQLConfig
-	Viper.UnmarshalKey("database.mysql", &config)
+	if err := Viper.UnmarshalKey("database.mysql", &config); err != nil {
+		// 记录错误但返回默认配置
+		if ZapLog != nil {
+			ZapLog.Error("解析MySQL配置失败", LogError(err))
+		}
+	}
 	return &config
 }
 
 // 获取SQLite配置
 func GetSQLiteConfig() *SQLiteConfig {
 	var config SQLiteConfig
-	Viper.UnmarshalKey("database.sqlite", &config)
+	if err := Viper.UnmarshalKey("database.sqlite", &config); err != nil {
+		// 记录错误但返回默认配置
+		if ZapLog != nil {
+			ZapLog.Error("解析SQLite配置失败", LogError(err))
+		}
+	}
 	return &config
 }
 

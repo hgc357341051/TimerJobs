@@ -145,14 +145,13 @@ func (jl *JobLogger) writeLog(level, message string) {
 		if ZapLog != nil {
 			ZapLog.Error("写入日志文件失败", LogError(err))
 		}
-		file.Sync()
 	}
-}
-
-// indentForDetail 判断是否需要缩进详细内容
-func indentForDetail(line string) string {
-	// 直接返回缩进
-	return "    "
+	// 同步文件到磁盘
+	if err := file.Sync(); err != nil {
+		if ZapLog != nil {
+			ZapLog.Error("同步日志文件失败", LogError(err))
+		}
+	}
 }
 
 // Error 记录错误日志
@@ -285,8 +284,25 @@ type JobExecLog struct {
 // 写入聚合日志
 func (jl *JobLogger) WriteSummaryLog(log *JobExecLog) {
 	logPath := jl.getLogPath()
-	line, _ := json.Marshal(log)
-	file, _ := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	line, err := json.Marshal(log)
+	if err != nil {
+		if ZapLog != nil {
+			ZapLog.Error("序列化日志数据失败", LogError(err))
+		}
+		return
+	}
+	file, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		if ZapLog != nil {
+			ZapLog.Error("打开日志文件失败", LogError(err))
+		}
+		return
+	}
 	defer file.Close()
-	file.WriteString(string(line) + "\n")
+
+	if _, err := file.WriteString(string(line) + "\n"); err != nil {
+		if ZapLog != nil {
+			ZapLog.Error("写入聚合日志失败", LogError(err))
+		}
+	}
 }

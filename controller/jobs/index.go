@@ -197,7 +197,12 @@ func (*Index) DeleteJob(c *gin.Context) {
 		return
 	}
 	if job.State == 1 || job.State == 0 {
-		global.RemoveJob(job.ID)
+		if err := global.RemoveJob(job.ID); err != nil {
+			// 记录错误但不影响删除操作的成功
+			if global.ZapLog != nil {
+				global.ZapLog.Error("从调度器移除任务失败", global.LogError(err))
+			}
+		}
 	}
 	funcs.Ok(c, "任务删除成功", nil)
 }
@@ -228,7 +233,12 @@ func (*Index) StopJob(c *gin.Context) {
 			funcs.No(c, "任务停止失败："+err.Error(), nil)
 			return
 		}
-		global.RemoveJob(job.ID)
+		if err := global.RemoveJob(job.ID); err != nil {
+			// 记录错误但不影响停止操作的成功
+			if global.ZapLog != nil {
+				global.ZapLog.Error("从调度器移除任务失败", global.LogError(err))
+			}
+		}
 		funcs.Ok(c, "任务停止成功", nil)
 	} else {
 		funcs.Ok(c, "任务已停止", nil)

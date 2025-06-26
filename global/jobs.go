@@ -221,14 +221,22 @@ func UpdateJob(job *Jobs) error {
 	// 如果任务状态改变，需要重新添加到调度器
 	if job.State != 2 {
 		// 先移除旧任务
-		RemoveJob(job.ID)
+		if err := RemoveJob(job.ID); err != nil {
+			if ZapLog != nil {
+				ZapLog.Error("从调度器移除旧任务失败", LogError(err))
+			}
+		}
 		// 再添加新任务
 		if err := AddJob(job); err != nil {
 			return err
 		}
 	} else {
 		// 如果任务停止，从调度器中移除
-		RemoveJob(job.ID)
+		if err := RemoveJob(job.ID); err != nil {
+			if ZapLog != nil {
+				ZapLog.Error("从调度器移除停止的任务失败", LogError(err))
+			}
+		}
 	}
 
 	return nil
@@ -285,8 +293,16 @@ func handle_Jobs(job *Jobs) cron.Job {
 
 			// 停止任务
 			job.State = 2
-			DB.Save(job)
-			RemoveJob(job.ID)
+			if err := DB.Save(job).Error; err != nil {
+				if ZapLog != nil {
+					ZapLog.Error("保存任务状态失败", LogError(err))
+				}
+			}
+			if err := RemoveJob(job.ID); err != nil {
+				if ZapLog != nil {
+					ZapLog.Error("从调度器移除任务失败", LogError(err))
+				}
+			}
 			return
 		}
 
@@ -521,12 +537,6 @@ func executeCommandJobV2(job *Jobs, needDetail bool) (success bool, command stri
 	return success, command, exitCode, stdout, stderr, err
 }
 
-// 替换 executeCommandJob
-func executeCommandJob(job *Jobs) (bool, string, error) {
-	success, _, _, stdout, _, err := executeCommandJobV2(job, false)
-	return success, stdout, err
-}
-
 // 替换 executeCommandJobForSummary
 func executeCommandJobForSummary(job *Jobs) (success bool, command string, exitCode int, stdout string, stderr string, err error) {
 	return executeCommandJobV2(job, true)
@@ -614,42 +624,6 @@ func parseCommandConfig(command string) (*CommandConfig, error) {
 	}
 
 	return config, nil
-}
-
-// executeFunctionJob 执行函数任务
-func executeFunctionJob(job *Jobs) (bool, string, error) {
-	// 创建任务日志管理器
-	jobLogger := NewJobLogger(job.ID, job.Name)
-
-	// 解析函数配置
-	config, err := parseFunctionConfig(job.Command)
-	if err != nil {
-		jobLogger.Error(fmt.Sprintf("解析函数配置失败: %v", err))
-		return false, "", fmt.Errorf("解析函数配置失败: %v", err)
-	}
-
-	// 从统一函数管理中获取函数
-	fn, exists := GetFunction(config.Name)
-	if !exists {
-		jobLogger.Error(fmt.Sprintf("未找到函数: %s", config.Name))
-		return false, "", fmt.Errorf("未找到函数: %s", config.Name)
-	}
-
-	// 执行函数
-	startTime := time.Now()
-	result, err := fn(config.Args)
-	endTime := time.Now()
-	duration := endTime.Sub(startTime)
-
-	// 记录函数执行输出
-	jobLogger.FunctionOutput(config.Name, config.Args, result, duration)
-
-	if err != nil {
-		jobLogger.Error(fmt.Sprintf("函数执行失败: %v", err))
-		return false, result, err
-	}
-
-	return true, result, nil
 }
 
 // 移除定时任务
