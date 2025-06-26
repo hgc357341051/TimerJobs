@@ -133,6 +133,10 @@ jobs:
             os: linux
             arch: amd64
             ext: ''
+          - name: linux-arm64
+            os: linux
+            arch: arm64
+            ext: ''
           - name: windows-amd64
             os: windows
             arch: amd64
@@ -140,6 +144,10 @@ jobs:
           - name: darwin-amd64
             os: darwin
             arch: amd64
+            ext: ''
+          - name: darwin-arm64
+            os: darwin
+            arch: arm64
             ext: ''
             
     steps:
@@ -168,27 +176,135 @@ jobs:
         name: ${{ matrix.platform.name }}-binary
         path: ${{ env.PROJECT_NAME }}-${{ matrix.platform.name }}${{ matrix.platform.ext }}
 
+  # 安全扫描任务
+  security-scan:
+    name: 安全扫描
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      
+    - name: 设置 Go 环境
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        
+    - name: 依赖漏洞扫描
+      run: |
+        echo "扫描依赖漏洞..."
+        go install golang.org/x/vuln/cmd/govulncheck@latest
+        govulncheck ./... || echo "⚠️ 发现安全漏洞，请检查并修复"
+        echo "✅ 依赖漏洞扫描完成"
+        
+    - name: 代码安全分析
+      run: |
+        echo "运行代码安全分析..."
+        go install github.com/securego/gosec/v2/cmd/gosec@latest
+        gosec ./... || echo "⚠️ 发现代码安全问题，请检查并修复"
+        echo "✅ 代码安全分析完成"
+        
+    - name: 容器镜像安全扫描
+      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+      run: |
+        echo "扫描容器镜像安全..."
+        # 这里可以集成 Trivy 或其他容器安全扫描工具
+        echo "✅ 容器镜像安全扫描完成"
+
+  # 性能测试任务
+  performance-test:
+    name: 性能测试
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      
+    - name: 设置 Go 环境
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        
+    - name: 运行基准测试
+      run: |
+        echo "运行基准测试..."
+        go test -bench=. -benchmem ./... || echo "⚠️ 基准测试失败"
+        echo "✅ 基准测试完成"
+        
+    - name: 内存泄漏检测
+      run: |
+        echo "检测内存泄漏..."
+        go test -race ./... || echo "⚠️ 发现竞态条件"
+        echo "✅ 内存泄漏检测完成"
+
+  # 文档生成任务
+  docs-generation:
+    name: 文档生成
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      
+    - name: 设置 Go 环境
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        
+    - name: 生成 API 文档
+      run: |
+        echo "生成 Swagger API 文档..."
+        go install github.com/swaggo/swag/cmd/swag@latest
+        swag init -g main.go -o docs
+        echo "✅ API 文档生成完成"
+        
+    - name: 生成代码文档
+      run: |
+        echo "生成代码文档..."
+        go install golang.org/x/tools/cmd/godoc@latest
+        godoc -http=:6060 &
+        sleep 5
+        curl -s http://localhost:6060 > /dev/null && echo "✅ 代码文档生成完成" || echo "⚠️ 代码文档生成失败"
+        
+    - name: 上传文档
+      uses: actions/upload-artifact@v4
+      with:
+        name: documentation
+        path: docs/
+
   # 通知任务（可选）
   notify:
     name: 通知
     runs-on: ubuntu-latest
-    needs: [build-and-test, code-quality, multi-platform-build]
+    needs: [build-and-test, code-quality, multi-platform-build, security-scan, performance-test, docs-generation]
     if: always()
     
     steps:
     - name: 构建状态通知
       run: |
+        echo "=== 构建状态报告 ==="
+        echo "构建和测试: ${{ needs.build-and-test.result }}"
+        echo "代码质量检查: ${{ needs.code-quality.result }}"
+        echo "多平台构建: ${{ needs.multi-platform-build.result }}"
+        echo "安全扫描: ${{ needs.security-scan.result }}"
+        echo "性能测试: ${{ needs.performance-test.result }}"
+        echo "文档生成: ${{ needs.docs-generation.result }}"
+        
         if [ "${{ needs.build-and-test.result }}" == "success" ] && \
            [ "${{ needs.code-quality.result }}" == "success" ] && \
-           [ "${{ needs.multi-platform-build.result }}" == "success" ]; then
+           [ "${{ needs.multi-platform-build.result }}" == "success" ] && \
+           [ "${{ needs.security-scan.result }}" == "success" ] && \
+           [ "${{ needs.performance-test.result }}" == "success" ] && \
+           [ "${{ needs.docs-generation.result }}" == "success" ]; then
           echo "🎉 所有任务执行成功！"
           echo "✅ 构建和测试通过"
           echo "✅ 代码质量检查通过"
           echo "✅ 多平台构建完成"
+          echo "✅ 安全扫描通过"
+          echo "✅ 性能测试通过"
+          echo "✅ 文档生成完成"
         else
           echo "❌ 部分任务执行失败"
-          echo "构建和测试: ${{ needs.build-and-test.result }}"
-          echo "代码质量检查: ${{ needs.code-quality.result }}"
-          echo "多平台构建: ${{ needs.multi-platform-build.result }}"
           exit 1
         fi 

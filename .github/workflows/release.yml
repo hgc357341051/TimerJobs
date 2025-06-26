@@ -1,0 +1,136 @@
+name: 自动发布 Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # 推送 v 开头的标签时触发
+
+env:
+  GO_VERSION: '1.24'
+  PROJECT_NAME: 'xiaohu-jobs'
+
+jobs:
+  release:
+    name: 构建并发布 Release
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform:
+          - name: linux-amd64
+            os: linux
+            arch: amd64
+            ext: ''
+          - name: linux-arm64
+            os: linux
+            arch: arm64
+            ext: ''
+          - name: windows-amd64
+            os: windows
+            arch: amd64
+            ext: '.exe'
+          - name: darwin-amd64
+            os: darwin
+            arch: amd64
+            ext: ''
+          - name: darwin-arm64
+            os: darwin
+            arch: arm64
+            ext: ''
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      
+    - name: 设置 Go 环境
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        cache: true
+        
+    - name: 安装依赖
+      run: |
+        go mod download
+        go mod tidy
+        
+    - name: 运行测试
+      run: go test -v ./...
+      
+    - name: 构建多平台二进制文件
+      run: |
+        echo "构建 ${{ matrix.platform.name }}..."
+        GOOS=${{ matrix.platform.os }} GOARCH=${{ matrix.platform.arch }} \
+        go build -v -ldflags="-s -w -X main.Version=${{ github.ref_name }}" \
+        -o ${{ env.PROJECT_NAME }}-${{ matrix.platform.name }}${{ matrix.platform.ext }} main.go
+        echo "✅ ${{ matrix.platform.name }} 构建完成"
+        
+    - name: 生成 Swagger 文档
+      run: |
+        echo "生成 API 文档..."
+        go install github.com/swaggo/swag/cmd/swag@latest
+        swag init -g main.go -o docs
+        echo "✅ API 文档生成完成"
+        
+    - name: 创建发布包
+      run: |
+        echo "创建发布包..."
+        VERSION="${{ github.ref_name }}"
+        RELEASE_DIR="release-${VERSION}"
+        mkdir -p ${RELEASE_DIR}
+        
+        # 复制二进制文件
+        cp ${{ env.PROJECT_NAME }}-* ${RELEASE_DIR}/
+        
+        # 复制文档
+        cp -r docs ${RELEASE_DIR}/
+        cp README.md ${RELEASE_DIR}/ || echo "README.md 不存在"
+        cp LICENSE ${RELEASE_DIR}/ || echo "LICENSE 不存在"
+        
+        # 创建压缩包
+        tar -czf ${RELEASE_DIR}.tar.gz ${RELEASE_DIR}/
+        zip -r ${RELEASE_DIR}.zip ${RELEASE_DIR}/
+        
+        echo "✅ 发布包创建完成"
+        
+    - name: 创建 GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          release-${{ github.ref_name }}.tar.gz
+          release-${{ github.ref_name }}.zip
+        body: |
+          ## 🚀 版本 ${{ github.ref_name }}
+          
+          ### 📦 下载
+          - **Linux/macOS**: 下载 `.tar.gz` 文件
+          - **Windows**: 下载 `.zip` 文件
+          
+          ### 🔧 安装
+          ```bash
+          # Linux/macOS
+          tar -xzf release-${{ github.ref_name }}.tar.gz
+          cd release-${{ github.ref_name }}
+          chmod +x xiaohu-jobs-*
+          ./xiaohu-jobs-linux-amd64  # 或对应的架构
+          
+          # Windows
+          # 解压 .zip 文件后运行 .exe 文件
+          ```
+          
+          ### 🏗️ 构建信息
+          - 构建时间: ${{ github.event.head_commit.timestamp }}
+          - 提交: ${{ github.sha }}
+          - 版本: ${{ github.ref_name }}
+          
+          ### 📚 文档
+          - [API 文档](docs/)
+          - [使用说明](README.md)
+          
+          ### 🔍 支持平台
+          - Linux (amd64, arm64)
+          - Windows (amd64)
+          - macOS (amd64, arm64)
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
