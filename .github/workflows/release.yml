@@ -81,139 +81,126 @@ jobs:
         swag init -g main.go -o docs
         echo "✅ API 文档生成完成"
         
-    - name: 创建发布包
-      run: |
-        echo "创建发布包..."
-        VERSION="${{ github.ref_name }}"
-        RELEASE_DIR="release-${VERSION}"
-        mkdir -p ${RELEASE_DIR}
-        
-        # 复制所有二进制文件
-        echo "复制二进制文件..."
-        cp ${{ env.PROJECT_NAME }}-* ${RELEASE_DIR}/ || echo "警告: 某些二进制文件可能不存在"
-        
-        # 复制文档
-        echo "复制文档..."
-        cp -r docs ${RELEASE_DIR}/ || echo "警告: docs 目录不存在"
-        cp README.md ${RELEASE_DIR}/ || echo "警告: README.md 不存在"
-        cp LICENSE ${RELEASE_DIR}/ || echo "警告: LICENSE 不存在"
-        
-        # 显示发布包内容
-        echo "发布包内容:"
-        ls -la ${RELEASE_DIR}/
-        echo ""
-        echo "二进制文件详情:"
-        ls -lh ${RELEASE_DIR}/${{ env.PROJECT_NAME }}-* || echo "没有找到二进制文件"
-        
-        # 创建压缩包
-        echo "创建压缩包..."
-        tar -czf ${RELEASE_DIR}.tar.gz ${RELEASE_DIR}/
-        zip -r ${RELEASE_DIR}.zip ${RELEASE_DIR}/
-        
-        echo "✅ 发布包创建完成"
-        echo "压缩包大小:"
-        ls -lh ${RELEASE_DIR}.*
-        
-        # 验证压缩包内容
-        echo "验证压缩包内容:"
-        echo "tar.gz 内容:"
-        tar -tzf ${RELEASE_DIR}.tar.gz | grep ${{ env.PROJECT_NAME }} || echo "没有找到二进制文件"
-        echo ""
-        echo "zip 内容:"
-        unzip -l ${RELEASE_DIR}.zip | grep ${{ env.PROJECT_NAME }} || echo "没有找到二进制文件"
-        
-    - name: 检查权限
-      run: |
-        echo "检查 GitHub Actions 权限..."
-        echo "GITHUB_TOKEN 是否存在: ${{ secrets.GITHUB_TOKEN != '' }}"
-        echo "当前用户: ${{ github.actor }}"
-        echo "仓库: ${{ github.repository }}"
-        echo "标签: ${{ github.ref_name }}"
-        echo "事件类型: ${{ github.event_name }}"
-        
-    - name: 创建 GitHub Release
-      id: gh-release
-      uses: softprops/action-gh-release@v1
-      continue-on-error: true
-      timeout-minutes: 10
+    - name: 创建 Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        files: |
-          release-${{ github.ref_name }}.tar.gz
-          release-${{ github.ref_name }}.zip
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref_name }}
         body: |
-          ## 🚀 版本 ${{ github.ref_name }}
+          ## 🚀 小胡定时任务系统 ${{ github.ref_name }}
           
-          ### 📦 下载
-          - **Linux/macOS**: 下载 `.tar.gz` 文件
-          - **Windows**: 下载 `.zip` 文件
+          ### 📦 下载说明
+          请根据您的操作系统选择对应的二进制文件：
           
-          ### 🔧 安装
-          ```bash
-          # Linux/macOS
-          tar -xzf release-${{ github.ref_name }}.tar.gz
-          cd release-${{ github.ref_name }}
-          chmod +x xiaohu-jobs-*
+          - **Linux x86_64**: `xiaohu-jobs-linux-amd64`
+          - **Linux ARM64**: `xiaohu-jobs-linux-arm64`
+          - **Windows x64**: `xiaohu-jobs-windows-amd64.exe`
+          - **macOS Intel**: `xiaohu-jobs-darwin-amd64`
+          - **macOS Apple Silicon**: `xiaohu-jobs-darwin-arm64`
           
-          # 选择适合您系统的二进制文件:
-          # Linux x86_64: ./xiaohu-jobs-linux-amd64
-          # Linux ARM64:  ./xiaohu-jobs-linux-arm64
-          # macOS Intel:  ./xiaohu-jobs-darwin-amd64
-          # macOS Apple Silicon: ./xiaohu-jobs-darwin-arm64
+          ### 🔧 使用说明
+          1. 下载对应您系统的二进制文件
+          2. 给文件添加执行权限（Linux/macOS）：`chmod +x xiaohu-jobs-*`
+          3. 运行程序：`./xiaohu-jobs-* start`
           
-          # Windows
-          # 解压 .zip 文件后运行 xiaohu-jobs-windows-amd64.exe
-          ```
-          
-          ### 🏗️ 构建信息
-          - 构建时间: ${{ github.event.head_commit.timestamp }}
-          - 提交: ${{ github.sha }}
-          - 版本: ${{ github.ref_name }}
-          
-          ### 📚 文档
-          - [API 文档](docs/)
-          - [使用说明](README.md)
-          
-          ### 🔍 支持平台
+          ### 📋 支持平台
           - **Linux**: amd64, arm64
           - **Windows**: amd64
           - **macOS**: amd64 (Intel), arm64 (Apple Silicon)
           
-          ### 📁 包含文件
-          - `xiaohu-jobs-linux-amd64` - Linux x86_64
-          - `xiaohu-jobs-linux-arm64` - Linux ARM64
-          - `xiaohu-jobs-windows-amd64.exe` - Windows x86_64
-          - `xiaohu-jobs-darwin-amd64` - macOS Intel
-          - `xiaohu-jobs-darwin-arm64` - macOS Apple Silicon
-          - `docs/` - API 文档
-          - `README.md` - 使用说明
-          - `LICENSE` - 许可证文件
+          ### 📄 包含文件
+          - 各平台二进制文件
+          - API 文档 (`docs/`)
+          
+          ### 🔍 更新日志
+          查看 [GitHub 提交记录](https://github.com/${{ github.repository }}/commits/${{ github.ref }}) 了解详细更新内容。
         draft: false
         prerelease: false
-        generate_release_notes: true
+        
+    - name: 上传 Linux amd64 二进制文件
+      uses: actions/upload-release-asset@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./xiaohu-jobs-linux-amd64
+        asset_name: xiaohu-jobs-linux-amd64
+        asset_content_type: application/octet-stream
+        
+    - name: 上传 Linux arm64 二进制文件
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./xiaohu-jobs-linux-arm64
+        asset_name: xiaohu-jobs-linux-arm64
+        asset_content_type: application/octet-stream
+        
+    - name: 上传 Windows amd64 二进制文件
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./xiaohu-jobs-windows-amd64.exe
+        asset_name: xiaohu-jobs-windows-amd64.exe
+        asset_content_type: application/octet-stream
+        
+    - name: 上传 macOS Intel 二进制文件
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./xiaohu-jobs-darwin-amd64
+        asset_name: xiaohu-jobs-darwin-amd64
+        asset_content_type: application/octet-stream
+        
+    - name: 上传 macOS Apple Silicon 二进制文件
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./xiaohu-jobs-darwin-arm64
+        asset_name: xiaohu-jobs-darwin-arm64
+        asset_content_type: application/octet-stream
+        
+    - name: 上传 API 文档
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./docs
+        asset_name: api-docs-${{ github.ref_name }}
+        asset_content_type: application/zip
         
     - name: 检查 Release 状态
       if: always()
       run: |
-        echo "Release 创建结果: ${{ steps.gh-release.outputs.result }}"
-        echo "Release URL: ${{ steps.gh-release.outputs.url }}"
-        echo "Release ID: ${{ steps.gh-release.outputs.id }}"
+        echo "Release 创建结果: ${{ steps.create_release.outputs.result }}"
+        echo "Release URL: ${{ steps.create_release.outputs.url }}"
+        echo "Release ID: ${{ steps.create_release.outputs.id }}"
         
-        if [ "${{ steps.gh-release.outputs.result }}" == "success" ]; then
+        if [ "${{ steps.create_release.outputs.result }}" == "success" ]; then
           echo "✅ GitHub Release 创建成功"
-          echo "Release URL: ${{ steps.gh-release.outputs.url }}"
+          echo "Release URL: ${{ steps.create_release.outputs.url }}"
         else
           echo "❌ GitHub Release 创建失败"
           echo "请检查权限设置或手动创建 Release"
         fi
         
-    - name: 上传构建产物
+    - name: 上传构建产物到 Artifacts
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: release-files-${{ github.ref_name }}
+        name: release-binaries-${{ github.ref_name }}
         path: |
-          release-${{ github.ref_name }}.tar.gz
-          release-${{ github.ref_name }}.zip
+          xiaohu-jobs-*
+          docs/
         retention-days: 30 

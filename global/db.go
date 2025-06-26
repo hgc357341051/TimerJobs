@@ -348,11 +348,10 @@ func autoMigrate() error {
 		fmt.Println("[数据库] 开始自动迁移表结构")
 	}
 
-	// 迁移所有模型（去除JobLog表）
+	// 迁移所有模型
 	err := DB.AutoMigrate(
 		&jobs.Jobs{},
 		&admins.Admin{},
-		&admins.SystemConfig{},
 	)
 
 	if err != nil {
@@ -410,50 +409,12 @@ func initDefaultData() error {
 		}
 	}
 
-	// 初始化系统配置
-	initSystemConfigs()
-
 	if ZapLog != nil {
 		ZapLog.Info("默认数据初始化完成")
 	} else {
 		fmt.Println("[数据库] 默认数据初始化完成")
 	}
 	return nil
-}
-
-// initSystemConfigs 初始化系统配置
-func initSystemConfigs() {
-	configs := []admins.SystemConfig{
-		{
-			ConfigKey:   "system_name",
-			ConfigValue: "小胡定时任务系统",
-			Description: "系统名称",
-		},
-		{
-			ConfigKey:   "system_version",
-			ConfigValue: "1.0.0",
-			Description: "系统版本",
-		},
-		{
-			ConfigKey:   "max_concurrent_jobs",
-			ConfigValue: "10",
-			Description: "最大并发任务数",
-		},
-		{
-			ConfigKey:   "job_timeout",
-			ConfigValue: "300",
-			Description: "任务超时时间(秒)",
-		},
-	}
-
-	for _, config := range configs {
-		var existingConfig admins.SystemConfig
-		if err := DB.Where("config_key = ?", config.ConfigKey).First(&existingConfig).Error; err != nil {
-			if err == gorm.ErrRecordNotFound {
-				DB.Create(&config)
-			}
-		}
-	}
 }
 
 // PingDB 测试数据库连接

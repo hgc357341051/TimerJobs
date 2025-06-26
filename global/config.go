@@ -2,10 +2,15 @@ package global
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 
 	"github.com/spf13/viper"
 )
+
+// Viper 全局配置管理器
+var Viper *viper.Viper
 
 // GlobalConfig 全局配置结构体
 // 用于统一管理应用程序的所有配置项，避免频繁读取配置文件
@@ -113,23 +118,37 @@ func GetGlobalConfig() *GlobalConfig {
 // 初始化Viper配置管理器，读取配置文件并加载到全局配置中
 // 返回值: error - 初始化失败时返回错误信息
 func InitConfig() error {
+	// 确保配置目录存在
+	configDir := "config"
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		return fmt.Errorf("创建配置目录失败: %v", err)
+	}
+
+	configFile := filepath.Join(configDir, "config.yaml")
+
+	// 检查配置文件是否存在，不存在则创建默认配置
+	if _, err := os.Stat(configFile); os.IsNotExist(err) {
+		if err := createDefaultConfig(configFile); err != nil {
+			return fmt.Errorf("创建默认配置文件失败: %v", err)
+		}
+		fmt.Printf("✅ 已创建默认配置文件: %s\n", configFile)
+	}
+
 	// 初始化Viper实例
 	Viper = viper.New()
 
 	// 设置配置文件路径
-	configPath := "config"
-	configName := "config"
-	configType := "yaml"
-
-	// 设置配置文件路径
-	Viper.AddConfigPath(configPath)
-	Viper.SetConfigName(configName)
-	Viper.SetConfigType(configType)
+	Viper.AddConfigPath(configDir)
+	Viper.SetConfigName("config")
+	Viper.SetConfigType("yaml")
 
 	// 读取配置文件
 	if err := Viper.ReadInConfig(); err != nil {
 		return fmt.Errorf("读取配置文件失败: %v", err)
 	}
+
+	// 设置默认值
+	setDefaultValues()
 
 	// 加载全局配置
 	if err := LoadGlobalConfig(); err != nil {
@@ -137,6 +156,107 @@ func InitConfig() error {
 	}
 
 	return nil
+}
+
+// 创建默认配置文件
+func createDefaultConfig(configFile string) error {
+	defaultConfig := `app:
+    name: 小胡测试系统
+    version: 1.0.0
+
+# 数据库配置
+# type: sqlite（推荐开发/单机） | mysql（推荐生产，需用环境变量覆盖）
+database:
+    type: sqlite  # sqlite 或 mysql
+    
+    # MySQL配置（生产环境建议用环境变量覆盖下方默认值）
+    mysql:
+        host: 127.0.0.1
+        port: 3306
+        username: root
+        password: root123456
+        dbname: xiaohu_jobs
+        charset: utf8mb4
+        tableprefix: xiaohus_
+        maxopenconns: 100
+        maxidleconns: 20
+    
+    # SQLite配置（推荐开发/单机，data 目录自动挂载）
+    sqlite:
+        path: data/xiaohu_jobs.db
+        tableprefix: xiaohus_
+        maxopenconns: 1
+        maxidleconns: 1
+
+logs:
+    zaplogdays: 3
+    zaplogswitch: true
+    zap_log_levels: ["info","error", "warn"] # 可多选:debug/info/warn/error
+    gin_log_methods: [] # POST/GET
+
+server:
+    port: 36363
+
+# IP访问控制配置
+ip_control:
+    enabled: true                    # 是否启用IP控制
+    whitelist:                       # IP白名单（优先级高）
+        - "127.0.0.1"
+        - "::1"
+    blacklist:                       # IP黑名单
+        # 黑名单可为空，因白名单模式会自动拒绝不在白名单中的IP
+    # 注意：白名单优先级高于黑名单，如在白名单中则跳过黑名单检查
+
+service:
+    name: "XiaohuJobService"
+    display_name: "小胡专用定时任务系统QQ357341051"
+    description: "小胡专用跨平台任务调度服务"
+
+daemon:
+    max_restarts: 10      # 守护进程最大重启次数
+    restart_delay: 5      # 重启间隔（秒）
+
+job_log_keep_count: 3
+
+# 生产环境建议用环境变量覆盖敏感配置，如：
+#   DATABASE_TYPE=mysql
+#   DATABASE_MYSQL_HOST=mysql
+#   DATABASE_MYSQL_PORT=3306
+#   DATABASE_MYSQL_USERNAME=xiaohu
+#   DATABASE_MYSQL_PASSWORD=xiaohu123
+#   DATABASE_MYSQL_DBNAME=xiaohu_jobs
+#   DATABASE_MYSQL_CHARSET=utf8mb4
+#   DATABASE_MYSQL_TABLEPREFIX=xiaohus_
+#   DATABASE_MYSQL_MAXOPENCONNS=100
+#   DATABASE_MYSQL_MAXIDLECONNS=20
+`
+
+	return os.WriteFile(configFile, []byte(defaultConfig), 0644)
+}
+
+// 设置默认值
+func setDefaultValues() {
+	// 数据库默认值
+	Viper.SetDefault("database.type", "sqlite")
+	Viper.SetDefault("database.mysql.charset", "utf8mb4")
+	Viper.SetDefault("database.mysql.maxidleconns", 20)
+	Viper.SetDefault("database.mysql.maxopenconns", 100)
+	Viper.SetDefault("database.mysql.connmaxlifetime", 60)
+	Viper.SetDefault("database.sqlite.tableprefix", "xiaohus_")
+	Viper.SetDefault("database.sqlite.maxopenconns", 1)
+	Viper.SetDefault("database.sqlite.maxidleconns", 1)
+	Viper.SetDefault("database.sqlite.connmaxlifetime", 60)
+
+	// 兼容旧配置的默认值
+	Viper.SetDefault("db_mysql.charset", "utf8mb4")
+	Viper.SetDefault("db_mysql.maxidleconns", 20)
+	Viper.SetDefault("db_mysql.maxopenconns", 100)
+
+	// 日志默认值
+	Viper.SetDefault("logs.zaplogdays", 7)
+	Viper.SetDefault("logs.zap_log_levels", []string{"info", "error", "warn"})
+	Viper.SetDefault("logs.gin_log_methods", []string{})
+	Viper.SetDefault("server.port", "36363")
 }
 
 // validateCriticalConfig 验证关键配置
@@ -341,4 +461,33 @@ func GetIPControlConfig() (bool, []string, []string) {
 			GlobalConfigInstance.IPControl.Blacklist
 	}
 	return false, nil, nil
+}
+
+// GetDatabaseType 获取数据库类型
+func GetDatabaseType() string {
+	return Viper.GetString("database.type")
+}
+
+// GetMySQLConfig 获取MySQL配置
+func GetMySQLConfig() *MySQLConfig {
+	var config MySQLConfig
+	if err := Viper.UnmarshalKey("database.mysql", &config); err != nil {
+		// 记录错误但返回默认配置
+		if ZapLog != nil {
+			ZapLog.Error("解析MySQL配置失败", LogError(err))
+		}
+	}
+	return &config
+}
+
+// GetSQLiteConfig 获取SQLite配置
+func GetSQLiteConfig() *SQLiteConfig {
+	var config SQLiteConfig
+	if err := Viper.UnmarshalKey("database.sqlite", &config); err != nil {
+		// 记录错误但返回默认配置
+		if ZapLog != nil {
+			ZapLog.Error("解析SQLite配置失败", LogError(err))
+		}
+	}
+	return &config
 }

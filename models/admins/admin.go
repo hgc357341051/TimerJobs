@@ -21,18 +21,3 @@ type Admin struct {
 func (Admin) TableName() string {
 	return "xiaohus_admins"
 }
-
-// SystemConfig 系统配置模型
-type SystemConfig struct {
-	ID          uint      `gorm:"primaryKey;autoIncrement:true" json:"id"`
-	ConfigKey   string    `gorm:"size:100;not null;unique;comment:配置键" json:"config_key"`
-	ConfigValue string    `gorm:"type:text;comment:配置值" json:"config_value"`
-	Description string    `gorm:"size:200;comment:配置描述" json:"description"`
-	CreatedAt   time.Time `gorm:"type:timestamp;default:CURRENT_TIMESTAMP;comment:创建时间" json:"created_at"`
-	UpdatedAt   time.Time `gorm:"type:timestamp;default:CURRENT_TIMESTAMP;comment:更新时间" json:"updated_at"`
-}
-
-// TableName 指定表名
-func (SystemConfig) TableName() string {
-	return "xiaohus_system_configs"
-}
