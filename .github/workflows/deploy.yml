@@ -88,16 +88,28 @@ jobs:
     - name: 检出代码
       uses: actions/checkout@v4
       
+    - name: 检查 Docker 凭据
+      id: check-docker-creds
+      run: |
+        if [ -n "${{ secrets.DOCKER_USERNAME }}" ] && [ -n "${{ secrets.DOCKER_PASSWORD }}" ]; then
+          echo "docker_creds_available=true" >> $GITHUB_OUTPUT
+        else
+          echo "docker_creds_available=false" >> $GITHUB_OUTPUT
+        fi
+      
     - name: 设置 Docker Buildx
+      if: steps.check-docker-creds.outputs.docker_creds_available == 'true'
       uses: docker/setup-buildx-action@v3
       
     - name: 登录到 Docker Hub
+      if: steps.check-docker-creds.outputs.docker_creds_available == 'true'
       uses: docker/login-action@v3
       with:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
         
     - name: 构建并推送 Docker 镜像
+      if: steps.check-docker-creds.outputs.docker_creds_available == 'true'
       uses: docker/build-push-action@v5
       with:
         context: .
@@ -106,4 +118,12 @@ jobs:
           ${{ secrets.DOCKER_USERNAME }}/${{ env.PROJECT_NAME }}:latest
           ${{ secrets.DOCKER_USERNAME }}/${{ env.PROJECT_NAME }}:${{ github.sha }}
         cache-from: type=gha
-        cache-to: type=gha,mode=max 
+        cache-to: type=gha,mode=max
+        
+    - name: 跳过 Docker 构建
+      if: steps.check-docker-creds.outputs.docker_creds_available == 'false'
+      run: |
+        echo "⚠️ 跳过 Docker 构建：未配置 DOCKER_USERNAME 和 DOCKER_PASSWORD secrets"
+        echo "如需构建 Docker 镜像，请在仓库 Settings → Secrets and variables → Actions 中配置："
+        echo "- DOCKER_USERNAME: Docker Hub 用户名"
+        echo "- DOCKER_PASSWORD: Docker Hub 密码或访问令牌" 
