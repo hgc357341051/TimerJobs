@@ -1,0 +1,30 @@
+name: 同步到 Gitee
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  sync-to-gitee:
+    name: 同步到 Gitee
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: 配置 Git
+      run: |
+        git config --global user.name "GitHub Actions"
+        git config --global user.email "actions@github.com"
+        
+    - name: 添加 Gitee 远程仓库
+      run: |
+        git remote add gitee https://${{ secrets.GITEE_USERNAME }}:${{ secrets.GITEE_ACCESS_TOKEN }}@gitee.com/${{ secrets.GITEE_USERNAME }}/${{ secrets.GITEE_REPO_NAME }}.git
+        
+    - name: 推送到 Gitee
+      run: |
+        git push gitee ${{ github.ref }}:refs/heads/${{ github.ref_name }} --force 
