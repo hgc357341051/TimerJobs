@@ -479,14 +479,14 @@ func GetDBStats() map[string]interface{} {
 
 	stats := sqlDB.Stats()
 	return map[string]interface{}{
-		"status":                "已连接",
-		"max_ope n_connections": stats.MaxOpenConnections,
-		"ope n_connections":     stats.OpenConnections,
-		"in_use":                stats.InUse,
-		"idle":                  stats.Idle,
-		"wait_count":            stats.WaitCount,
-		" wait_duration":        stats.WaitDuration.String(),
-		"ma x_idle_closed":      stats.MaxIdleClosed,
-		"max_li fetime_closed":  stats.MaxLifetimeClosed,
+		"status":               "已连接",
+		"max_open_connections": stats.MaxOpenConnections,
+		"open_connections":     stats.OpenConnections,
+		"in_use":               stats.InUse,
+		"idle":                 stats.Idle,
+		"wait_count":           stats.WaitCount,
+		"wait_duration":        stats.WaitDuration.String(),
+		"max_idle_closed":      stats.MaxIdleClosed,
+		"max_lifetime_closed":  stats.MaxLifetimeClosed,
 	}
 }

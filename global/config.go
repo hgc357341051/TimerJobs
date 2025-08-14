@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/spf13/viper"
 )
@@ -21,6 +22,16 @@ type GlobalConfig struct {
 		Name    string `mapstructure:"name"`    // 应用名称
 		Version string `mapstructure:"version"` // 应用版本
 	} `mapstructure:"app"`
+
+	// Jobs 任务系统配置
+	Jobs struct {
+		DefaultAllowMode      int  `mapstructure:"default_allow_mode"`
+		ManualAllowConcurrent bool `mapstructure:"manual_allow_concurrent"`
+		DefaultTimeoutSeconds int  `mapstructure:"default_timeout_seconds"`
+		HTTPResponseMaxBytes  int  `mapstructure:"http_response_max_bytes"`
+		LogSummaryEnabled     bool `mapstructure:"log_summary_enabled"`
+		LogLineTruncate       int  `mapstructure:"log_line_truncate"`
+	} `mapstructure:"jobs"`
 
 	// Database 数据库配置
 	Database struct {
@@ -87,6 +98,7 @@ type GlobalConfig struct {
 var (
 	GlobalConfigInstance *GlobalConfig // 全局配置实例
 	configMutex          sync.RWMutex  // 配置读写锁，保证并发安全
+	StartTime            time.Time     // 程序启动时间
 )
 
 // LoadGlobalConfig 加载全局配置
@@ -247,6 +259,14 @@ func setDefaultValues() {
 	Viper.SetDefault("database.sqlite.maxidleconns", 1)
 	Viper.SetDefault("database.sqlite.connmaxlifetime", 60)
 
+	// 任务系统默认值
+	Viper.SetDefault("jobs.default_allow_mode", 0)
+	Viper.SetDefault("jobs.manual_allow_concurrent", true)
+	Viper.SetDefault("jobs.default_timeout_seconds", 60)
+	Viper.SetDefault("jobs.http_response_max_bytes", 1000)
+	Viper.SetDefault("jobs.log_summary_enabled", true)
+	Viper.SetDefault("jobs.log_line_truncate", 1000)
+
 	// 兼容旧配置的默认值
 	Viper.SetDefault("db_mysql.charset", "utf8mb4")
 	Viper.SetDefault("db_mysql.maxidleconns", 20)
@@ -257,6 +277,22 @@ func setDefaultValues() {
 	Viper.SetDefault("logs.zap_log_levels", []string{"info", "error", "warn"})
 	Viper.SetDefault("logs.gin_log_methods", []string{})
 	Viper.SetDefault("server.port", "36363")
+}
+
+// Job 配置便捷获取
+func GetJobsConfigInt(key string, def int) int {
+	v := Viper.GetInt(key)
+	if v == 0 {
+		return def
+	}
+	return v
+}
+
+func GetJobsConfigBool(key string, def bool) bool {
+	if !Viper.IsSet(key) {
+		return def
+	}
+	return Viper.GetBool(key)
 }
 
 // validateCriticalConfig 验证关键配置

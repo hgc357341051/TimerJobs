@@ -267,6 +267,8 @@ type JobExecLog struct {
 	Status     string   `json:"status"` // 成功/失败
 	DurationMs int64    `json:"duration_ms"`
 	Mode       string   `json:"mode"`
+	ExecID     string   `json:"exec_id,omitempty"`
+	Source     string   `json:"source,omitempty"` // 执行来源：cron/manual
 	Command    string   `json:"command,omitempty"`
 	ExitCode   int      `json:"exit_code,omitempty"`
 	Stdout     string   `json:"stdout,omitempty"`
@@ -291,18 +293,21 @@ func (jl *JobLogger) WriteSummaryLog(log *JobExecLog) {
 		}
 		return
 	}
-	file, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	file, err := jl.getFileHandle(logPath)
 	if err != nil {
 		if ZapLog != nil {
-			ZapLog.Error("打开日志文件失败", LogError(err))
+			ZapLog.Error("获取日志文件句柄失败", LogError(err))
 		}
 		return
 	}
-	defer file.Close()
-
-	if _, err := file.WriteString(string(line) + "\n"); err != nil {
-		if ZapLog != nil {
-			ZapLog.Error("写入聚合日志失败", LogError(err))
-		}
+	writeMutex.Lock()
+	_, werr := file.WriteString(string(line) + "\n")
+	serr := file.Sync()
+	writeMutex.Unlock()
+	if werr != nil && ZapLog != nil {
+		ZapLog.Error("写入聚合日志失败", LogError(werr))
+	}
+	if serr != nil && ZapLog != nil {
+		ZapLog.Error("同步聚合日志失败", LogError(serr))
 	}
 }

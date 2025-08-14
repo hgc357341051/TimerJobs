@@ -14,21 +14,30 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
 	"xiaohuAdmin/models/jobs"
 
+	"github.com/google/uuid"
 	"github.com/robfig/cron/v3"
 	"golang.org/x/net/proxy"
 	"golang.org/x/text/encoding/simplifiedchinese"
 	"golang.org/x/text/transform"
+	"gorm.io/gorm"
 )
 
 var (
 	Timer        *cron.Cron
 	TaskList     map[uint]cron.EntryID
 	TimerRunning bool // 新增状态标志
+
+	taskMu    sync.RWMutex
+	runningMu sync.RWMutex
+
+	// 手动执行并发控制：每个任务一个容量为1的信号量，用于串行/跳过/排队
+	jobSemaphores sync.Map // map[uint]chan struct{}
 )
 
 // Jobs 定时任务模型 - 使用models/jobs包中的Jobs类型
@@ -46,9 +55,16 @@ func InitJobs() {
 		return
 	}
 
+	taskMu.Lock()
 	TaskList = make(map[uint]cron.EntryID)
+	taskMu.Unlock()
 	cronLogger := &CronLogger{}
-	Timer = cron.New(cron.WithSeconds(), cron.WithLocation(time.Local), cron.WithLogger(cronLogger))
+	Timer = cron.New(
+		cron.WithSeconds(),
+		cron.WithLocation(time.Local),
+		cron.WithLogger(cronLogger),
+		cron.WithChain(cron.Recover(cronLogger)),
+	)
 
 	var dbJobs []Jobs
 	//查询待执行任务列表
@@ -83,7 +99,9 @@ func InitJobs() {
 	}
 
 	Timer.Start()
+	runningMu.Lock()
 	TimerRunning = true // 设置初始状态
+	runningMu.Unlock()
 
 }
 
@@ -97,29 +115,35 @@ func StopTimer() {
 		select {
 		case <-ctx.Done():
 			// 额外检查是否有残留任务
-			if len(TaskList) > 0 {
+			remaining := GetTaskListSnapshot()
+			if len(remaining) > 0 {
 				if ZapLog != nil {
 					ZapLog.Warn("检测到残留任务",
-						LogField("count", len(TaskList)))
+						LogField("count", len(remaining)))
 				} else {
-					fmt.Printf("[任务] 检测到残留任务: %d个\n", len(TaskList))
+					fmt.Printf("[任务] 检测到残留任务: %d个\n", len(remaining))
 				}
 
 				// 强制清除所有任务
-				for jobId := range TaskList {
-					Timer.Remove(cron.EntryID(TaskList[jobId]))
-					delete(TaskList, jobId)
+				for jobId, entryId := range remaining {
+					Timer.Remove(cron.EntryID(entryId))
+					deleteTaskId(jobId)
 				}
 			}
+			runningMu.Lock()
 			TimerRunning = false
+			runningMu.Unlock()
 		case <-time.After(30 * time.Second):
+			pending := GetTaskCount()
 			if ZapLog != nil {
 				ZapLog.Error("停止任务超时，强制终止",
-					LogField("pending_tasks", len(TaskList)))
+					LogField("pending_tasks", pending))
 			} else {
-				fmt.Printf("[任务] 停止任务超时，强制终止，待处理任务: %d个\n", len(TaskList))
+				fmt.Printf("[任务] 停止任务超时，强制终止，待处理任务: %d个\n", pending)
 			}
+			runningMu.Lock()
 			TimerRunning = false
+			runningMu.Unlock()
 		}
 	}
 }
@@ -181,7 +205,22 @@ func CreateJob(job *Jobs) error {
 
 // 新增定时任务到调度器
 func AddJob(job *Jobs) error {
-	eid, err := Timer.AddJob(job.CronExpr, handle_Jobs(job))
+	// 根据 AllowMode 设置并发策略（支持全局默认）
+	allow := job.AllowMode
+	if allow == 0 { // 0 表示并行；若全局配置指定了1或2，则作为默认
+		cfgDefault := GetJobsConfigInt("jobs.default_allow_mode", 0)
+		if cfgDefault == 1 || cfgDefault == 2 {
+			allow = cfgDefault
+		}
+	}
+	var j cron.Job = handle_Jobs(job)
+	switch allow {
+	case 1: // 串行，仍在执行时跳过
+		j = cron.NewChain(cron.SkipIfStillRunning(&CronLogger{})).Then(j)
+	case 2: // 串行，仍在执行时排队
+		j = cron.NewChain(cron.DelayIfStillRunning(&CronLogger{})).Then(j)
+	}
+	eid, err := Timer.AddJob(job.CronExpr, j)
 	if err != nil {
 		if ZapLog != nil {
 			ZapLog.Error("添加任务失败",
@@ -243,20 +282,65 @@ func UpdateJob(job *Jobs) error {
 }
 
 // 手动执行任务
-func RunJobManually(job *Jobs) {
-	executeJob(job)
+func RunJobManually(job *Jobs) string {
+	execID := uuid.NewString()
+	go executeJobWithExecID(job, execID)
+	return execID
+}
+
+// 手动执行任务（带并发策略），返回 execID/是否跳过/原因
+func RunJobManuallyWithPolicy(job *Jobs) (execID string, skipped bool, reason string) {
+	// 是否允许手动并发
+	allowConc := GetJobsConfigBool("jobs.manual_allow_concurrent", true)
+	if allowConc {
+		return RunJobManually(job), false, ""
+	}
+
+	// 不允许手动并发时，按 AllowMode 决定策略
+	switch job.AllowMode {
+	case 1: // Skip: 仍在执行时跳过
+		ch := getJobSemaphore(job.ID)
+		select {
+		case ch <- struct{}{}:
+			// 获得执行权
+			execID = uuid.NewString()
+			go func() {
+				defer func() { <-ch }()
+				executeJobWithExecID(job, execID)
+			}()
+			return execID, false, ""
+		default:
+			// 正在执行，跳过
+			return "", true, "任务仍在执行，已按策略跳过"
+		}
+	case 2: // Delay: 排队直到可执行
+		ch := getJobSemaphore(job.ID)
+		execID = uuid.NewString()
+		go func() {
+			ch <- struct{}{}
+			defer func() { <-ch }()
+			executeJobWithExecID(job, execID)
+		}()
+		return execID, false, ""
+	default: // 并行
+		return RunJobManually(job), false, ""
+	}
 }
 
 // 执行任务
 func executeJob(job *Jobs) bool {
 	jobLogger := NewJobLogger(job.ID, job.Name)
 	startTime := time.Now()
+	// running++
+	MetricsSetRunning(1)
 
 	log := &JobExecLog{
 		Time:    startTime.Format("2006-01-02 15:04:05.000"),
 		JobID:   job.ID,
 		JobName: job.Name,
 		Mode:    job.Mode,
+		ExecID:  uuid.NewString(),
+		Source:  "cron",
 	}
 	var success bool
 	var err error
@@ -282,38 +366,118 @@ func executeJob(job *Jobs) bool {
 	}
 
 	jobLogger.WriteSummaryLog(log)
+	// 指标
+	MetricsIncExec(strconv.Itoa(int(job.ID)), job.Name, job.Mode)
+	if !success {
+		MetricsIncFail(strconv.Itoa(int(job.ID)), job.Name, job.Mode)
+	}
+	MetricsObserveDuration(strconv.Itoa(int(job.ID)), job.Name, job.Mode, float64(log.DurationMs)/1000.0)
+	// running--
+	MetricsSetRunning(-1)
+	return success
+}
+
+// 带外部执行ID的执行函数（用于手动执行返回可跟踪ID）
+func executeJobWithExecID(job *Jobs, execID string) bool {
+	jobLogger := NewJobLogger(job.ID, job.Name)
+	startTime := time.Now()
+	MetricsSetRunning(1)
+
+	log := &JobExecLog{
+		Time:    startTime.Format("2006-01-02 15:04:05.000"),
+		JobID:   job.ID,
+		JobName: job.Name,
+		Mode:    job.Mode,
+		ExecID:  execID,
+		Source:  "manual",
+	}
+	var success bool
+	var err error
+
+	switch job.Mode {
+	case "command":
+		success, log.Command, log.ExitCode, log.Stdout, log.Stderr, err = executeCommandJobForSummary(job)
+	case "http":
+		success, log.Stdout, err = executeHTTPJobForSummary(job)
+	case "function", "func":
+		success, log.Stdout, err = executeFunctionJobForSummary(job)
+	default:
+		err = fmt.Errorf("不支持的任务模式: %s", job.Mode)
+		success = false
+	}
+
+	endTime := time.Now()
+	log.EndTime = endTime.Format("2006-01-02 15:04:05.000")
+	log.Status = map[bool]string{true: "成功", false: "失败"}[success]
+	log.DurationMs = endTime.Sub(startTime).Milliseconds()
+	if err != nil {
+		log.ErrorMsg = err.Error()
+	}
+
+	jobLogger.WriteSummaryLog(log)
+	MetricsIncExec(strconv.Itoa(int(job.ID)), job.Name, job.Mode)
+	if !success {
+		MetricsIncFail(strconv.Itoa(int(job.ID)), job.Name, job.Mode)
+	}
+	MetricsObserveDuration(strconv.Itoa(int(job.ID)), job.Name, job.Mode, float64(log.DurationMs)/1000.0)
+	MetricsSetRunning(-1)
 	return success
 }
 
 func handle_Jobs(job *Jobs) cron.Job {
 	return cron.FuncJob(func() {
 
-		// 检查任务是否达到最大执行次数
-		if job.MaxRunCount > 0 && job.RunCount >= job.MaxRunCount {
+		// 读取数据库中的最新计数与上限
+		var current Jobs
+		if err := DB.Select("id,max_run_count,run_count,state").First(&current, job.ID).Error; err == nil {
+			if current.MaxRunCount > 0 && current.RunCount >= current.MaxRunCount {
+				// 达到上限：置停止并移除
+				DB.Model(&jobs.Jobs{}).Where("id=?", job.ID).Update("state", 2)
+				if err := RemoveJob(job.ID); err != nil {
+					if ZapLog != nil {
+						ZapLog.Error("从调度器移除任务失败", LogError(err))
+					}
+				}
+				return
+			}
+		}
 
-			// 停止任务
-			job.State = 2
-			if err := DB.Save(job).Error; err != nil {
-				if ZapLog != nil {
-					ZapLog.Error("保存任务状态失败", LogError(err))
-				}
+		// 执行前置状态：执行中
+		if err := DB.Model(&jobs.Jobs{}).Where("id=?", job.ID).Update("state", 1).Error; err != nil {
+			if ZapLog != nil {
+				ZapLog.Warn("更新任务为执行中失败", LogError(err), LogField("job_id", job.ID))
 			}
-			if err := RemoveJob(job.ID); err != nil {
-				if ZapLog != nil {
-					ZapLog.Error("从调度器移除任务失败", LogError(err))
-				}
-			}
-			return
 		}
 
 		// 执行任务
-		executeJob(job)
+		success := executeJob(job)
 
-		// 只有当MaxRunCount不为0时才更新任务统计信息
-		if job.MaxRunCount > 0 {
-			DB.Model(job).Updates(map[string]interface{}{
-				"run_count": job.RunCount + 1,
-			})
+		// 统计：原子自增
+		if err := DB.Model(&jobs.Jobs{}).Where("id=?", job.ID).UpdateColumn("run_count", gorm.Expr("run_count + ?", 1)).Error; err != nil {
+			if ZapLog != nil {
+				ZapLog.Warn("更新任务运行次数失败", LogError(err), LogField("job_id", job.ID))
+			}
+		}
+
+		// 读取最新计数判断是否达到上限
+		if err := DB.Select("id,max_run_count,run_count").First(&current, job.ID).Error; err == nil {
+			if current.MaxRunCount > 0 && current.RunCount >= current.MaxRunCount {
+				DB.Model(&jobs.Jobs{}).Where("id=?", job.ID).Update("state", 2)
+				if err := RemoveJob(job.ID); err != nil {
+					if ZapLog != nil {
+						ZapLog.Error("从调度器移除任务失败", LogError(err))
+					}
+				}
+				return
+			}
+		}
+
+		// 执行结束：若仍启用则置为等待
+		if success {
+			DB.Model(&jobs.Jobs{}).Where("id=? AND state<>?", job.ID, 2).Update("state", 0)
+		} else {
+			// 失败也置回等待（可根据需要扩展失败状态）
+			DB.Model(&jobs.Jobs{}).Where("id=? AND state<>?", job.ID, 2).Update("state", 0)
 		}
 
 	})
@@ -322,22 +486,25 @@ func handle_Jobs(job *Jobs) cron.Job {
 // executeHTTPJob 执行HTTP任务
 // HTTPConfig HTTP任务配置结构
 type HTTPConfig struct {
-	URL     string            `json:"url"`
-	Headers map[string]string `json:"headers"`
-	Mode    string            `json:"mode"`
-	Times   int               `json:"times"`
-	Proxy   string            `json:"proxy"`
-	Data    string            `json:"data"`
-	Cookies string            `json:"cookies"`
-	Result  string            `json:"result"` // 自定义结果判断字符串
+	URL      string            `json:"url"`
+	Headers  map[string]string `json:"headers"`
+	Mode     string            `json:"mode"`
+	Times    int               `json:"times"`
+	Interval int               `json:"interval"` // 次数间隔秒
+	Proxy    string            `json:"proxy"`
+	Data     string            `json:"data"`
+	Cookies  string            `json:"cookies"`
+	Result   string            `json:"result"`  // 自定义结果判断字符串
+	Timeout  int               `json:"timeout"` // 超时时间（秒）
 }
 
 // parseHTTPConfig 解析HTTP任务配置
 func parseHTTPConfig(command string) (*HTTPConfig, error) {
 	config := &HTTPConfig{
 		Headers: make(map[string]string),
-		Mode:    "GET", // 默认GET
-		Times:   0,     // 默认0表示不限制
+		Mode:    "GET",                                                // 默认GET
+		Times:   0,                                                    // 默认0表示不限制
+		Timeout: GetJobsConfigInt("jobs.default_timeout_seconds", 60), // 默认超时
 	}
 
 	lines := strings.Split(command, "\n")
@@ -397,6 +564,18 @@ func parseHTTPConfig(command string) (*HTTPConfig, error) {
 			continue
 		}
 
+		// 解析间隔秒数
+		if strings.HasPrefix(line, "【interval】") {
+			iv := strings.TrimPrefix(line, "【interval】")
+			iv = strings.TrimSpace(iv)
+			if iv != "" {
+				if secs, err := strconv.Atoi(iv); err == nil {
+					config.Interval = secs
+				}
+			}
+			continue
+		}
+
 		// 解析代理
 		if strings.HasPrefix(line, "【proxy】") {
 			proxy := strings.TrimPrefix(line, "【proxy】")
@@ -433,6 +612,18 @@ func parseHTTPConfig(command string) (*HTTPConfig, error) {
 			result = strings.TrimSpace(result)
 			if result != "" {
 				config.Result = result
+			}
+			continue
+		}
+
+		// 解析超时时间
+		if strings.HasPrefix(line, "【timeout】") {
+			timeoutStr := strings.TrimPrefix(line, "【timeout】")
+			timeoutStr = strings.TrimSpace(timeoutStr)
+			if timeoutStr != "" {
+				if timeout, err := strconv.Atoi(timeoutStr); err == nil {
+					config.Timeout = timeout
+				}
 			}
 			continue
 		}
@@ -539,22 +730,65 @@ func executeCommandJobV2(job *Jobs, needDetail bool) (success bool, command stri
 
 // 替换 executeCommandJobForSummary
 func executeCommandJobForSummary(job *Jobs) (success bool, command string, exitCode int, stdout string, stderr string, err error) {
-	return executeCommandJobV2(job, true)
+	cfg, perr := parseCommandConfig(job.Command)
+	if perr != nil {
+		return false, cfg.Command, 0, "", "", fmt.Errorf("解析命令配置失败: %v", perr)
+	}
+	// 次数与间隔
+	attempts := cfg.Times
+	if attempts <= 0 {
+		attempts = 1
+	}
+	var outB strings.Builder
+	var errB strings.Builder
+	var lastExit int
+	var lastErr error
+	anySuccess := false
+	for i := 1; i <= attempts; i++ {
+		s, cmdStr, code, out, er, e := executeCommandJobV2(job, true)
+		if i == 1 {
+			command = cmdStr
+		}
+		lastExit = code
+		lastErr = e
+		outB.WriteString(fmt.Sprintf("\n=== 第 %d/%d 次执行 ===\n", i, attempts))
+		if out != "" {
+			outB.WriteString(out)
+		}
+		if er != "" {
+			errB.WriteString(fmt.Sprintf("\n[attempt %d] %s\n", i, er))
+		}
+		if s {
+			anySuccess = true
+		}
+		if i < attempts && cfg.Interval > 0 {
+			time.Sleep(time.Duration(cfg.Interval) * time.Second)
+		}
+	}
+	stdout = outB.String()
+	stderr = errB.String()
+	exitCode = lastExit
+	if anySuccess {
+		return true, command, exitCode, stdout, stderr, nil
+	}
+	return false, command, exitCode, stdout, stderr, lastErr
 }
 
 // CommandConfig 命令任务配置结构
 type CommandConfig struct {
-	Command string        `json:"command"`  // 要执行的命令
-	WorkDir string        `json:"work_dir"` // 工作目录
-	Env     []string      `json:"env"`      // 环境变量
-	Timeout time.Duration `json:"timeout"`  // 超时时间
+	Command  string        `json:"command"`  // 要执行的命令
+	WorkDir  string        `json:"work_dir"` // 工作目录
+	Env      []string      `json:"env"`      // 环境变量
+	Timeout  time.Duration `json:"timeout"`  // 超时时间
+	Times    int           `json:"times"`
+	Interval int           `json:"interval"`
 }
 
 // parseCommandConfig 解析命令任务配置
 func parseCommandConfig(command string) (*CommandConfig, error) {
 	config := &CommandConfig{
-		Command: command,          // 默认整个command就是要执行的命令
-		Timeout: 30 * time.Second, // 默认30秒超时
+		Command: command,                                                                           // 默认整个command就是要执行的命令
+		Timeout: time.Duration(GetJobsConfigInt("jobs.default_timeout_seconds", 30)) * time.Second, // 默认超时
 		Env:     make([]string, 0),
 	}
 
@@ -612,6 +846,30 @@ func parseCommandConfig(command string) (*CommandConfig, error) {
 			}
 			continue
 		}
+
+		// 解析执行次数
+		if strings.HasPrefix(line, "【times】") {
+			t := strings.TrimPrefix(line, "【times】")
+			t = strings.TrimSpace(t)
+			if t != "" {
+				if n, err := strconv.Atoi(t); err == nil {
+					config.Times = n
+				}
+			}
+			continue
+		}
+
+		// 解析间隔
+		if strings.HasPrefix(line, "【interval】") {
+			iv := strings.TrimPrefix(line, "【interval】")
+			iv = strings.TrimSpace(iv)
+			if iv != "" {
+				if n, err := strconv.Atoi(iv); err == nil {
+					config.Interval = n
+				}
+			}
+			continue
+		}
 	}
 
 	// 如果没有找到【command】标记，则整个command就是命令
@@ -628,11 +886,14 @@ func parseCommandConfig(command string) (*CommandConfig, error) {
 
 // 移除定时任务
 func RemoveJob(jobId uint) error {
-	ZapLog.Info("移除任务", LogField("id", jobId), LogField("job_id", TaskList[jobId]))
-	if cron.EntryID(TaskList[jobId]) == 0 {
+	ZapLog.Info("移除任务", LogField("id", jobId), LogField("job_id", func() cron.EntryID { taskMu.RLock(); defer taskMu.RUnlock(); return TaskList[jobId] }()))
+	taskMu.RLock()
+	entryID := TaskList[jobId]
+	taskMu.RUnlock()
+	if cron.EntryID(entryID) == 0 {
 		return fmt.Errorf("任务不存在")
 	}
-	Timer.Remove(cron.EntryID(TaskList[jobId]))
+	Timer.Remove(cron.EntryID(entryID))
 	deleteTaskId(jobId)
 
 	return nil
@@ -640,24 +901,57 @@ func RemoveJob(jobId uint) error {
 
 // 添加任务ID映射
 func AddTaskId(taskId uint, entryId cron.EntryID) {
+	taskMu.Lock()
 	TaskList[taskId] = entryId
+	taskMu.Unlock()
 }
 
 // 删除任务ID映射
 func deleteTaskId(taskId uint) {
+	taskMu.Lock()
 	delete(TaskList, taskId)
+	taskMu.Unlock()
+}
+
+// 并发安全：获取任务数量
+func GetTaskCount() int {
+	taskMu.RLock()
+	defer taskMu.RUnlock()
+	return len(TaskList)
+}
+
+// 并发安全：获取任务快照（用于只读遍历）
+func GetTaskListSnapshot() map[uint]cron.EntryID {
+	result := make(map[uint]cron.EntryID)
+	taskMu.RLock()
+	for k, v := range TaskList {
+		result[k] = v
+	}
+	taskMu.RUnlock()
+	return result
+}
+
+// 并发安全：获取调度器运行状态
+func IsTimerRunning() bool {
+	runningMu.RLock()
+	defer runningMu.RUnlock()
+	return TimerRunning
 }
 
 // FunctionConfig 函数任务配置结构
 type FunctionConfig struct {
-	Name string   `json:"name"` // 函数名
-	Args []string `json:"args"` // 函数参数
+	Name     string   `json:"name"` // 函数名
+	Args     []string `json:"args"` // 函数参数
+	Times    int      `json:"times"`
+	Interval int      `json:"interval"`
+	Timeout  int      `json:"timeout"` // 超时时间（秒）
 }
 
 // parseFunctionConfig 解析函数任务配置
 func parseFunctionConfig(command string) (*FunctionConfig, error) {
 	config := &FunctionConfig{
-		Args: make([]string, 0),
+		Args:    make([]string, 0),
+		Timeout: GetJobsConfigInt("jobs.default_timeout_seconds", 30), // 默认超时
 	}
 
 	lines := strings.Split(command, "\n")
@@ -689,6 +983,42 @@ func parseFunctionConfig(command string) (*FunctionConfig, error) {
 				// 解析参数，支持逗号分隔
 				args := parseFunctionArgs(argsStr)
 				config.Args = args
+			}
+			continue
+		}
+
+		// 解析执行次数
+		if strings.HasPrefix(line, "【times】") {
+			t := strings.TrimPrefix(line, "【times】")
+			t = strings.TrimSpace(t)
+			if t != "" {
+				if n, err := strconv.Atoi(t); err == nil {
+					config.Times = n
+				}
+			}
+			continue
+		}
+
+		// 解析间隔
+		if strings.HasPrefix(line, "【interval】") {
+			iv := strings.TrimPrefix(line, "【interval】")
+			iv = strings.TrimSpace(iv)
+			if iv != "" {
+				if n, err := strconv.Atoi(iv); err == nil {
+					config.Interval = n
+				}
+			}
+			continue
+		}
+
+		// 解析超时时间
+		if strings.HasPrefix(line, "【timeout】") {
+			timeoutStr := strings.TrimPrefix(line, "【timeout】")
+			timeoutStr = strings.TrimSpace(timeoutStr)
+			if timeoutStr != "" {
+				if timeout, err := strconv.Atoi(timeoutStr); err == nil {
+					config.Timeout = timeout
+				}
 			}
 			continue
 		}
@@ -783,23 +1113,24 @@ func executeHTTPJobForSummary(job *Jobs) (success bool, stdout string, err error
 
 	// 设置代理
 	if config.Proxy != "" {
-		proxyURL, err := url.Parse(config.Proxy)
-		if err != nil {
-			errorMsg := fmt.Sprintf("代理错误: 解析代理URL失败 - %v", err)
+		proxyURL, perr := url.Parse(config.Proxy)
+		if perr != nil {
+			errorMsg := fmt.Sprintf("代理错误: 解析代理URL失败 - %v", perr)
 			requestInfo.WriteString(errorMsg + "\n")
-			return false, requestInfo.String(), fmt.Errorf("解析代理URL失败: %v", err)
+			return false, requestInfo.String(), fmt.Errorf("解析代理URL失败: %v", perr)
 		}
 
 		// 根据代理类型设置不同的处理方式
 		if strings.HasPrefix(config.Proxy, "socks") {
-			// SOCKS代理需要特殊处理
-			dialer, err := proxy.SOCKS5("tcp", proxyURL.Host, nil, proxy.Direct)
-			if err != nil {
-				errorMsg := fmt.Sprintf("代理错误: 创建SOCKS代理拨号器失败 - %v", err)
+			// SOCKS代理
+			dialer, derr := proxy.SOCKS5("tcp", proxyURL.Host, nil, proxy.Direct)
+			if derr != nil {
+				errorMsg := fmt.Sprintf("代理错误: 创建SOCKS代理拨号器失败 - %v", derr)
 				requestInfo.WriteString(errorMsg + "\n")
-				return false, requestInfo.String(), fmt.Errorf("创建SOCKS代理拨号器失败: %v", err)
+				return false, requestInfo.String(), fmt.Errorf("创建SOCKS代理拨号器失败: %v", derr)
 			}
 			transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+				// 该接口不支持ctx取消，只能尽量复用传入的上下文
 				return dialer.Dial(network, addr)
 			}
 		} else {
@@ -808,113 +1139,139 @@ func executeHTTPJobForSummary(job *Jobs) (success bool, stdout string, err error
 		}
 	}
 
-	// 创建HTTP客户端，增加超时时间
+	// 创建HTTP客户端，使用配置的超时时间
 	client := &http.Client{
 		Transport: transport,
-		Timeout:   60 * time.Second, // 增加到60秒超时
+		Timeout:   time.Duration(config.Timeout) * time.Second,
 	}
 
-	// 创建请求
-	var req *http.Request
-	var err2 error
-
-	if config.Mode == "POST" {
-		// POST请求
-		var body io.Reader
-		if config.Data != "" {
-			body = strings.NewReader(config.Data)
-			requestInfo.WriteString(fmt.Sprintf("POST数据: %s\n", config.Data))
-		}
-		req, err2 = http.NewRequest("POST", config.URL, body)
-	} else {
-		// GET请求（默认）
-		req, err2 = http.NewRequest("GET", config.URL, nil)
-	}
-
-	if err2 != nil {
-		errorMsg := fmt.Sprintf("请求错误: 创建HTTP请求失败 - %v", err2)
-		requestInfo.WriteString(errorMsg + "\n")
-		return false, requestInfo.String(), fmt.Errorf("创建HTTP请求失败: %v", err2)
-	}
-
-	// 设置请求头
+	// 设置请求头/通用信息
 	if len(config.Headers) > 0 {
 		requestInfo.WriteString("请求头:\n")
 		for key, value := range config.Headers {
-			req.Header.Set(key, value)
 			requestInfo.WriteString(fmt.Sprintf("  %s: %s\n", key, value))
 		}
 	}
-
-	// 设置Cookie
 	if config.Cookies != "" {
-		req.Header.Set("Cookie", config.Cookies)
 		requestInfo.WriteString(fmt.Sprintf("Cookie: %s\n", config.Cookies))
 	}
-
-	// 执行请求
-	resp, err := client.Do(req)
-	if err != nil {
-		errorMsg := fmt.Sprintf("请求错误: HTTP请求失败 - %v", err)
-		requestInfo.WriteString(errorMsg + "\n")
-		return false, requestInfo.String(), fmt.Errorf("HTTP请求失败: %v", err)
-	}
-	defer resp.Body.Close()
-
-	// 添加响应状态信息
-	requestInfo.WriteString(fmt.Sprintf("响应状态: %s (%d)\n", resp.Status, resp.StatusCode))
-
-	// 读取响应体
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		errorMsg := fmt.Sprintf("响应错误: 读取响应体失败 - %v", err)
-		requestInfo.WriteString(errorMsg + "\n")
-		return false, requestInfo.String(), fmt.Errorf("读取响应体失败: %v", err)
+	if config.Data != "" && strings.ToUpper(config.Mode) == "POST" {
+		requestInfo.WriteString(fmt.Sprintf("POST数据: %s\n", config.Data))
 	}
 
-	// 检测并转换编码
-	encoding := detectEncoding(body, resp.Header.Get("Content-Type"))
-	utf8Body, err := convertToUTF8(body, encoding)
-	if err != nil {
-		errorMsg := fmt.Sprintf("编码错误: 编码转换失败 - %v", err)
-		requestInfo.WriteString(errorMsg + "\n")
-		return false, requestInfo.String(), fmt.Errorf("编码转换失败: %v", err)
+	// Times 支持：<=0 视为 1 次
+	attempts := config.Times
+	if attempts <= 0 {
+		attempts = 1
 	}
 
-	// 添加响应头信息
-	if len(resp.Header) > 0 {
-		requestInfo.WriteString("响应头:\n")
-		for key, values := range resp.Header {
-			for _, value := range values {
-				requestInfo.WriteString(fmt.Sprintf("  %s: %s\n", key, value))
+	// 响应截断长度从配置获取
+	maxBytes := GetJobsConfigInt("jobs.http_response_max_bytes", 1000)
+	if maxBytes <= 0 {
+		maxBytes = 1000
+	}
+
+	// 执行循环
+	anySuccess := false
+	for i := 1; i <= attempts; i++ {
+		requestInfo.WriteString(fmt.Sprintf("\n=== 第 %d/%d 次请求 ===\n", i, attempts))
+
+		// 创建请求
+		var req *http.Request
+		var reqErr error
+		method := strings.ToUpper(config.Mode)
+		if method == "POST" {
+			var body io.Reader
+			if config.Data != "" {
+				body = strings.NewReader(config.Data)
 			}
+			req, reqErr = http.NewRequest("POST", config.URL, body)
+		} else {
+			req, reqErr = http.NewRequest("GET", config.URL, nil)
+		}
+		if reqErr != nil {
+			errorMsg := fmt.Sprintf("请求错误: 创建HTTP请求失败 - %v", reqErr)
+			requestInfo.WriteString(errorMsg + "\n")
+			// 本次失败，继续下一次
+			continue
+		}
+
+		// 设置头/Cookie
+		for key, value := range config.Headers {
+			req.Header.Set(key, value)
+		}
+		if config.Cookies != "" {
+			req.Header.Set("Cookie", config.Cookies)
+		}
+
+		// 执行请求
+		resp, doErr := client.Do(req)
+		if doErr != nil {
+			errorMsg := fmt.Sprintf("请求错误: HTTP请求失败 - %v", doErr)
+			requestInfo.WriteString(errorMsg + "\n")
+			continue
+		}
+		func() {
+			defer resp.Body.Close()
+
+			// 状态
+			requestInfo.WriteString(fmt.Sprintf("响应状态: %s (%d)\n", resp.Status, resp.StatusCode))
+
+			// 读取响应
+			body, rerr := io.ReadAll(resp.Body)
+			if rerr != nil {
+				requestInfo.WriteString(fmt.Sprintf("响应错误: 读取响应体失败 - %v\n", rerr))
+				return
+			}
+			encoding := detectEncoding(body, resp.Header.Get("Content-Type"))
+			utf8Body, cerr := convertToUTF8(body, encoding)
+			if cerr != nil {
+				requestInfo.WriteString(fmt.Sprintf("编码错误: 编码转换失败 - %v\n", cerr))
+				return
+			}
+
+			// 响应头（仅第一次打印以控制体积）
+			if i == 1 && len(resp.Header) > 0 {
+				requestInfo.WriteString("响应头:\n")
+				for key, values := range resp.Header {
+					for _, value := range values {
+						requestInfo.WriteString(fmt.Sprintf("  %s: %s\n", key, value))
+					}
+				}
+			}
+
+			// 响应内容（截断）
+			responseContent := string(utf8Body)
+			if maxBytes > 0 && len(responseContent) > maxBytes {
+				responseContent = responseContent[:maxBytes] + "\n... (响应内容已截断)"
+			}
+			requestInfo.WriteString("响应内容:\n")
+			requestInfo.WriteString(responseContent)
+
+			// 判断是否成功
+			s := resp.StatusCode >= 200 && resp.StatusCode < 300
+			if config.Result != "" {
+				s = strings.Contains(responseContent, config.Result)
+				requestInfo.WriteString(fmt.Sprintf("\n自定义结果判断: 查找 '%s' - %s", config.Result, map[bool]string{true: "找到", false: "未找到"}[s]))
+			}
+			if s {
+				anySuccess = true
+			}
+		}()
+		// 间隔控制（最后一次不等待）
+		if i < attempts && config.Interval > 0 {
+			time.Sleep(time.Duration(config.Interval) * time.Second)
 		}
 	}
 
-	// 添加响应内容
-	responseContent := string(utf8Body)
-	if len(responseContent) > 1000 {
-		responseContent = responseContent[:1000] + "\n... (响应内容已截断)"
-	}
-	requestInfo.WriteString(fmt.Sprintf("响应内容:\n%s", responseContent))
-
-	// 判断是否成功
-	success = resp.StatusCode >= 200 && resp.StatusCode < 300
-
-	// 如果有自定义结果判断
-	if config.Result != "" {
-		success = strings.Contains(responseContent, config.Result)
-		requestInfo.WriteString(fmt.Sprintf("\n自定义结果判断: 查找 '%s' - %s", config.Result, map[bool]string{true: "找到", false: "未找到"}[success]))
-	}
-
-	return success, requestInfo.String(), nil
+	return anySuccess, requestInfo.String(), nil
 }
 
 // 新增：function模式的聚合执行
 func executeFunctionJobForSummary(job *Jobs) (success bool, stdout string, err error) {
-	config, err := parseFunctionConfig(job.Command)
-	if err != nil {
-		return false, "", fmt.Errorf("解析函数配置失败: %v", err)
+	config, e := parseFunctionConfig(job.Command)
+	if e != nil {
+		return false, "", fmt.Errorf("解析函数配置失败: %v", e)
 	}
 
 	// 从统一函数管理中获取函数
@@ -923,12 +1280,71 @@ func executeFunctionJobForSummary(job *Jobs) (success bool, stdout string, err e
 		return false, "", fmt.Errorf("未找到函数: %s", config.Name)
 	}
 
-	// 执行函数
-	result, err := fn(config.Args)
-
-	if err != nil {
-		return false, result, err
+	attempts := config.Times
+	if attempts <= 0 {
+		attempts = 1
 	}
 
-	return true, result, nil
+	var b strings.Builder
+	anySuccess := false
+	var lastErr error
+
+	for i := 1; i <= attempts; i++ {
+		b.WriteString(fmt.Sprintf("\n=== 第 %d/%d 次执行 ===\n", i, attempts))
+
+		// 创建带超时的上下文
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(config.Timeout)*time.Second)
+
+		// 使用通道实现超时控制
+		resultChan := make(chan struct {
+			result string
+			err    error
+		}, 1)
+
+		go func() {
+			res, ferr := fn(config.Args)
+			resultChan <- struct {
+				result string
+				err    error
+			}{res, ferr}
+		}()
+
+		select {
+		case result := <-resultChan:
+			if result.result != "" {
+				b.WriteString(result.result)
+			}
+			if result.err == nil {
+				anySuccess = true
+			} else {
+				lastErr = result.err
+				b.WriteString(fmt.Sprintf("\n[attempt %d] error: %v\n", i, result.err))
+			}
+		case <-ctx.Done():
+			lastErr = fmt.Errorf("函数执行超时（%d秒）", config.Timeout)
+			b.WriteString(fmt.Sprintf("\n[attempt %d] timeout: %v\n", i, lastErr))
+		}
+
+		cancel()
+
+		// 间隔控制（最后一次不等待）
+		if i < attempts && config.Interval > 0 {
+			time.Sleep(time.Duration(config.Interval) * time.Second)
+		}
+	}
+
+	if anySuccess {
+		return true, b.String(), nil
+	}
+	return false, b.String(), lastErr
+}
+
+// 获取任务信号量（容量为1），用于手动执行的并发控制
+func getJobSemaphore(jobID uint) chan struct{} {
+	if ch, ok := jobSemaphores.Load(jobID); ok {
+		return ch.(chan struct{})
+	}
+	ch := make(chan struct{}, 1)
+	actual, _ := jobSemaphores.LoadOrStore(jobID, ch)
+	return actual.(chan struct{})
 }

@@ -380,8 +380,19 @@ func (*Index) JobRun(c *gin.Context) {
 		funcs.No(c, "任务未找到", nil)
 		return
 	}
-	global.RunJobManually(&job)
-	funcs.Ok(c, "任务已手动执行", nil)
+	// 根据配置决定是否允许手动并发
+	if global.GetJobsConfigBool("jobs.manual_allow_concurrent", true) {
+		execID := global.RunJobManually(&job)
+		funcs.Ok(c, "任务已手动执行", gin.H{"exec_id": execID, "skipped": false})
+		return
+	}
+	// 不允许并发时，按 AllowMode 执行策略
+	execID, skipped, reason := global.RunJobManuallyWithPolicy(&job)
+	if skipped {
+		funcs.Ok(c, "任务已按策略跳过", gin.H{"skipped": true, "reason": reason})
+		return
+	}
+	funcs.Ok(c, "任务已手动执行", gin.H{"exec_id": execID, "skipped": false})
 }
 
 // @Summary 启动所有任务
@@ -420,7 +431,7 @@ func (*Index) JobStopAll(c *gin.Context) {
 // @Router /jobs/jobState [get]
 func (*Index) JobState(c *gin.Context) {
 	entries := global.Timer.Entries()
-	if global.TimerRunning {
+	if global.IsTimerRunning() {
 
 		funcs.Ok(c, "任务运行中", gin.H{"num": len(entries), "state": true})
 	} else {
@@ -448,10 +459,26 @@ func (*Index) JobRestart(c *gin.Context) {
 		funcs.No(c, "任务未找到："+err.Error(), nil)
 		return
 	}
-	if err := global.UpdateJob(&job); err != nil {
+
+	// 先停止任务（从调度器中移除）
+	if err := global.RemoveJob(job.ID); err != nil {
+		// 记录错误但不影响重启操作
+		global.ZapLog.Warn("移除旧任务失败", global.LogError(err), global.LogField("job_id", job.ID))
+	}
+
+	// 无论任务之前是什么状态，都将状态设置为等待（0）并重新添加到调度器
+	job.State = 0 // 将状态改为等待
+	if err := global.DB.Save(&job).Error; err != nil {
+		funcs.No(c, "更新任务状态失败："+err.Error(), nil)
+		return
+	}
+
+	// 重新添加到调度器
+	if err := global.AddJob(&job); err != nil {
 		funcs.No(c, "任务重启失败："+err.Error(), nil)
 		return
 	}
+
 	funcs.Ok(c, "任务重启成功", nil)
 }
 
@@ -680,7 +707,7 @@ func (*Index) GetSchedulerTasks(c *gin.Context) {
 	for _, entry := range entries {
 		// 从TaskList中查找对应的任务ID
 		var jobID uint
-		for id, entryID := range global.TaskList {
+		for id, entryID := range global.GetTaskListSnapshot() {
 			if entryID == entry.ID {
 				jobID = id
 				break
@@ -710,7 +737,7 @@ func (*Index) GetSchedulerTasks(c *gin.Context) {
 
 	// 返回调度器状态和任务列表
 	funcs.Ok(c, "获取调度器任务列表成功", gin.H{
-		"scheduler_running": global.TimerRunning,
+		"scheduler_running": global.IsTimerRunning(),
 		"total_tasks":       len(entries),
 		"tasks":             taskList,
 	})
@@ -769,27 +796,27 @@ func getFunctionDescription(name string) string {
 // getFunctionParameters 获取函数参数说明
 func getFunctionParameters(name string) string {
 	parameters := map[string]string{
-		"Dayin":    "参数1,参数2,参数3 - 任意参数",
-		"Test":     "任意参数 - 用于测试",
-		"Hello":    "name - 问候对象名称",
-		"Time":     "format - 时间格式(可选)",
-		"Echo":     "任意参数 - 回显内容",
-		"Math":     "操作符 数字1 数字2 - 数学运算",
-		"File":     "操作 文件路径 - 文件操作",
-		"Database": "操作 SQL语句 - 数据库操作",
-		"Email":    "收件人 主题 内容 - 邮件发送",
-		"SMS":      "手机号 内容 - 短信发送",
-		"Webhook":  "URL 数据(可选) - Webhook调用",
-		"Backup":   "源路径(可选) - 数据备份",
-		"Cleanup":  "路径(可选) - 清理操作",
-		"Monitor":  "目标(可选) - 监控目标",
-		"Report":   "报告类型(可选) - 报告类型",
+		"Dayin":    "参数1,参数2,参数3 - 任意参数；times(可选)，interval(秒，可选)",
+		"Test":     "任意参数 - 用于测试；times(可选)，interval(秒，可选)",
+		"Hello":    "name - 问候对象名称；times(可选)，interval(秒，可选)",
+		"Time":     "format - 时间格式(可选)；times(可选)，interval(秒，可选)",
+		"Echo":     "任意参数 - 回显内容；times(可选)，interval(秒，可选)",
+		"Math":     "操作符 数字1 数字2 - 数学运算；times(可选)，interval(秒，可选)",
+		"File":     "操作 文件路径 - 文件操作；times(可选)，interval(秒，可选)",
+		"Database": "操作 SQL语句 - 数据库操作；times(可选)，interval(秒，可选)",
+		"Email":    "收件人 主题 内容 - 邮件发送；times(可选)，interval(秒，可选)",
+		"SMS":      "手机号 内容 - 短信发送；times(可选)，interval(秒，可选)",
+		"Webhook":  "URL 数据(可选) - Webhook调用；times(可选)，interval(秒，可选)",
+		"Backup":   "源路径(可选) - 数据备份；times(可选)，interval(秒，可选)",
+		"Cleanup":  "路径(可选) - 清理操作；times(可选)，interval(秒，可选)",
+		"Monitor":  "目标(可选) - 监控目标；times(可选)，interval(秒，可选)",
+		"Report":   "报告类型(可选) - 报告类型；times(可选)，interval(秒，可选)",
 	}
 
 	if param, exists := parameters[name]; exists {
 		return param
 	}
-	return "无参数"
+	return "无参数（支持 times/interval 可选）"
 }
 
 // @Summary 查询任务日志
@@ -873,6 +900,61 @@ func (*Index) JobLogs(c *gin.Context) {
 		"msg":  "查询成功",
 		"data": logs,
 	})
+}
+
+// @Summary 按执行ID查询任务执行结果
+// @Description 通过任务ID与exec_id查询某次执行的汇总日志（可选date，默认当天）
+// @Tags 日志管理
+// @Accept json
+// @Produce json
+// @Param id query int true "任务ID"
+// @Param exec_id query string true "执行ID"
+// @Param date query string false "查询日期(YYYY-MM-DD)"
+// @Success 200 {object} function.JsonData "查询成功"
+// @Failure 400 {object} function.JsonData "参数错误"
+// @Router /jobs/execs [get]
+func (*Index) GetExecByID(c *gin.Context) {
+	jobID := funcs.GetQueryInt(c, "id", 0)
+	execID := funcs.GetQueryString(c, "exec_id", "")
+	dateStr := funcs.GetQueryString(c, "date", "")
+	if jobID <= 0 || strings.TrimSpace(execID) == "" {
+		funcs.No(c, "参数错误：id 和 exec_id 必填", nil)
+		return
+	}
+	if dateStr == "" {
+		dateStr = time.Now().Format("2006-01-02")
+	}
+	logFile := fmt.Sprintf("runtime/jobs/%d/%s/%s/%s.log", jobID, dateStr[:4], dateStr[5:7], dateStr[8:10])
+	file, err := os.Open(logFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			funcs.Ok(c, "未找到执行记录", nil)
+		} else {
+			funcs.No(c, "打开日志文件失败："+err.Error(), nil)
+		}
+		return
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(strings.TrimSpace(string(line))) == 0 {
+			continue
+		}
+		var entry map[string]interface{}
+		if err := json.Unmarshal(line, &entry); err == nil {
+			if v, ok := entry["exec_id"].(string); ok && v == execID {
+				funcs.Ok(c, "查询成功", entry)
+				return
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		funcs.No(c, "读取日志文件失败："+err.Error(), nil)
+		return
+	}
+	funcs.Ok(c, "未找到执行记录", nil)
 }
 
 // 获取日志保留数量
@@ -1005,11 +1087,34 @@ func (*Index) ReloadConfig(c *gin.Context) {
 	funcs.Ok(c, "配置重载成功", nil)
 }
 
-// getUptime 获取系统运行时间
+// @Summary 获取任务系统配置
+// @Description 返回 jobs.* 相关配置快照
+// @Tags 任务管理
+// @Accept json
+// @Produce json
+// @Success 200 {object} function.JsonData "成功响应"
+// @Router /jobs/config [get]
+func (*Index) GetJobsConfig(c *gin.Context) {
+	cfg := global.GetGlobalConfig()
+	if cfg == nil {
+		funcs.No(c, "配置未初始化", nil)
+		return
+	}
+	data := gin.H{
+		"default_allow_mode":      cfg.Jobs.DefaultAllowMode,
+		"manual_allow_concurrent": cfg.Jobs.ManualAllowConcurrent,
+		"default_timeout_seconds": cfg.Jobs.DefaultTimeoutSeconds,
+		"http_response_max_bytes": cfg.Jobs.HTTPResponseMaxBytes,
+		"log_summary_enabled":     cfg.Jobs.LogSummaryEnabled,
+		"log_line_truncate":       cfg.Jobs.LogLineTruncate,
+	}
+	funcs.Ok(c, "获取配置成功", data)
+}
+
+// getUptime 获取系统运行时间（秒）
 func getUptime() int64 {
-	// 这里可以添加实际的运行时间计算
-	// 暂时返回一个固定值
-	return time.Now().Unix()
+	// 计算从程序启动到现在的秒数
+	return int64(time.Since(global.StartTime).Seconds())
 }
 
 // getMemoryStats 获取内存统计
@@ -1023,4 +1128,69 @@ func getMemoryStats() map[string]interface{} {
 		"sys":         m.Sys,
 		"num_gc":      m.NumGC,
 	}
+}
+
+// ClearLogsRequest 清空日志请求结构体
+// 用于清空任务日志或系统日志
+// 示例：{"id":1,"date":"2025-06-25","type":"job"}
+type ClearLogsRequest struct {
+	ID   uint   `json:"id"`                      // 任务ID，type为job时必填
+	Date string `json:"date"`                    // 日期，格式：YYYY-MM-DD
+	Type string `json:"type" binding:"required"` // 日志类型：job 或 zap
+}
+
+// @Summary 清空日志
+// @Description 清空指定任务或系统指定日期的日志文件
+// @Tags 日志管理
+// @Accept json
+// @Produce json
+// @Param data body index.ClearLogsRequest true "清空日志参数" 例：{"id":1,"date":"2025-06-25","type":"job"}
+// @Success 200 {object} function.JsonData "操作成功"
+// @Failure 400 {object} function.JsonData "参数错误"
+// @Router /jobs/logs/clear [post]
+func (*Index) ClearLogs(c *gin.Context) {
+	var req ClearLogsRequest
+	if !bindAndValidate(c, &req) {
+		return
+	}
+
+	// 如果date为空，默认当天
+	dateStr := req.Date
+	if dateStr == "" {
+		dateStr = time.Now().Format("2006-01-02")
+	}
+
+	var logFile string
+	if req.Type == "job" {
+		if req.ID <= 0 {
+			funcs.No(c, "参数错误：任务ID不能为空", nil)
+			return
+		}
+		logFile = fmt.Sprintf("runtime/jobs/%d/%s/%s/%s.log", req.ID, dateStr[:4], dateStr[5:7], dateStr[8:10])
+	} else if req.Type == "zap" {
+		logFile = fmt.Sprintf("runtime/logs_%s.log", strings.ReplaceAll(dateStr, "-", ""))
+	} else {
+		funcs.No(c, "参数错误：type必须为job或zap", nil)
+		return
+	}
+
+	// 检查文件是否存在
+	if _, err := os.Stat(logFile); os.IsNotExist(err) {
+		funcs.Ok(c, "日志文件不存在，无需清空", gin.H{
+			"file":   logFile,
+			"exists": false,
+		})
+		return
+	}
+
+	// 清空日志文件
+	if err := os.Truncate(logFile, 0); err != nil {
+		funcs.No(c, "清空日志文件失败："+err.Error(), nil)
+		return
+	}
+
+	funcs.Ok(c, "日志已清空", gin.H{
+		"file":    logFile,
+		"cleared": true,
+	})
 }

@@ -20,6 +20,7 @@ import (
 	"xiaohuAdmin/routers"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // Windows下DETACHED_PROCESS常量兼容
@@ -39,6 +40,9 @@ type program struct {
 
 // Run 主程序入口，初始化配置、日志、数据库并启动服务
 func Run() {
+	// 初始化程序启动时间
+	global.StartTime = time.Now()
+
 	if err := global.InitConfig(); err != nil {
 		fmt.Printf("配置初始化失败: %v\n", err)
 		os.Exit(1)
@@ -82,6 +86,7 @@ func (p *program) StartServer() error {
 		global.ZapLog.Fatal("数据库初始化失败", global.LogError(err))
 		return err
 	}
+	global.InitMetrics()
 	gin.DisableConsoleColor()
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
@@ -93,6 +98,10 @@ func (p *program) StartServer() error {
 	router.Use(global.GinLogger())
 	router.Use(ipmiddlewares.IPControl())
 	routers.InitGlobal(router)
+	// 注册 Prometheus /metrics
+	router.GET("/metrics", func(c *gin.Context) {
+		promhttp.Handler().ServeHTTP(c.Writer, c.Request)
+	})
 	global.InitJobs()
 	config := global.GetGlobalConfig()
 	port := config.Server.Port

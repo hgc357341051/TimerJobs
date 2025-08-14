@@ -38,12 +38,15 @@ func JobsInit(r *gin.Engine) {
 		JobsRouters.POST("/checkJob", JobsController.CalibrateJobList)
 		JobsRouters.GET("/scheduler", JobsController.GetSchedulerTasks)
 		JobsRouters.GET("/functions", JobsController.GetFunctions)
+		JobsRouters.GET("/config", JobsController.GetJobsConfig)
 
 		// 日志管理接口
 		JobsRouters.GET("/zapLogs", JobsController.ZapLogs)
 		JobsRouters.GET("/switchState", JobsController.LogSwitchState)
 		JobsRouters.GET("/jobState", JobsController.JobState)
 		JobsRouters.POST("/logs", JobsController.JobLogs)
+		JobsRouters.GET("/execs", JobsController.GetExecByID)
+		JobsRouters.POST("/logs/clear", JobsController.ClearLogs)
 
 		// IP控制管理接口
 		JobsRouters.GET("/ip-control/status", JobsController.GetIPControlStatus)
@@ -58,10 +61,10 @@ func JobsInit(r *gin.Engine) {
 		// 系统状态接口
 		JobsRouters.GET("/health", JobsController.Health)
 		JobsRouters.GET("/jobStatus", func(c *gin.Context) {
-			running := global.Timer != nil && global.TimerRunning
+			running := global.Timer != nil && global.IsTimerRunning()
 			c.JSON(200, gin.H{
 				"running":    running,
-				"task_count": len(global.TaskList),
+				"task_count": global.GetTaskCount(),
 			})
 		})
 	}
