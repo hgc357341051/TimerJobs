@@ -22,6 +22,7 @@ yarn.lock
 
 # 构建输出
 dist/
+data/
 build/
 *.exe
 

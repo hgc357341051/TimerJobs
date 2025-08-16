@@ -69,6 +69,114 @@ go mod tidy
 
 ---
 
+## 前端部署
+
+### 前端环境准备
+- Node.js 16+ 和 npm/yarn/pnpm
+- 前端代码位于 `webview/` 目录
+
+### 开发环境运行
+```bash
+# 进入前端目录
+cd webview
+
+# 安装依赖
+npm install
+# 或使用 yarn
+yarn install
+# 或使用 pnpm
+pnpm install
+
+# 启动开发服务器
+npm run dev
+# 或使用 yarn
+yarn dev
+# 或使用 pnpm
+pnpm dev
+
+# 访问地址：http://localhost:3001
+```
+
+### 生产环境打包
+```bash
+# 进入前端目录
+cd webview
+
+# 安装依赖
+npm install
+
+# 构建生产版本
+npm run build
+
+# 构建产物位于 webview/dist 目录
+# 包含：静态HTML、CSS、JS文件
+```
+
+### 前后端集成部署
+
+#### 方案一：后端集成前端（推荐）
+后端服务会自动托管前端静态文件，无需额外配置。
+
+#### 方案二：独立部署前端
+将构建产物部署到Nginx或其他Web服务器：
+
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+    
+    location / {
+        root /path/to/webview/dist;
+        index index.html;
+        try_files $uri $uri/ /index.html;
+    }
+    
+    location /api/ {
+        proxy_pass http://localhost:36363/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
+#### 方案三：Docker一体化部署
+```dockerfile
+# 多阶段构建
+FROM node:18-alpine AS frontend-builder
+WORKDIR /app/webview
+COPY webview/package*.json ./
+RUN npm ci --only=production
+COPY webview/ ./
+RUN npm run build
+
+FROM golang:1.24-alpine AS backend-builder
+WORKDIR /app
+COPY . .
+RUN go mod download
+RUN go build -o main main.go
+
+FROM alpine:latest
+RUN apk --no-cache add ca-certificates
+WORKDIR /root/
+COPY --from=backend-builder /app/main .
+COPY --from=backend-builder /app/config ./config
+COPY --from=frontend-builder /app/webview/dist ./webview/dist
+EXPOSE 36363
+CMD ["./main","start"]
+```
+
+### 环境变量配置
+前端支持以下环境变量：
+
+| 变量名 | 说明 | 默认值 |
+|--------|------|--------|
+| `VITE_API_BASE_URL` | API基础URL | `http://localhost:36363` |
+| `VITE_APP_TITLE` | 应用标题 | `小胡定时任务系统` |
+
+在 `webview/.env` 或 `webview/.env.production` 中配置。
+
+---
+
 ## 主要功能与接口
 
 ### 任务管理
@@ -421,8 +529,6 @@ go mod tidy
    - 按照 swagger 注释规范补全接口和结构体注释
    - 运行 `swag init` 自动生成文档
 
----
-
 ## 部署与运维
 
 ### Docker 部署
@@ -482,4 +588,4 @@ WantedBy=multi-user.target
 
 ## License
 
-MIT 
+MIT
