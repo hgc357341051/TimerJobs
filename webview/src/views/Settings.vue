@@ -187,9 +187,9 @@
             </el-col>
             <el-col :span="6">
               <div class="stat-item">
-                <div class="stat-label">已停止任务</div>
+                <div class="stat-label">等待任务</div>
                 <div class="stat-value">
-                  <el-tag type="info">
+                  <el-tag type="warning">
                     {{ schedulerTasks.filter(t => t.state === 0).length }} 个
                   </el-tag>
                 </div>
@@ -230,6 +230,19 @@
               </template>
             </el-table-column>
           </el-table>
+          
+          <!-- 分页 -->
+          <div class="pagination">
+            <el-pagination
+              v-model:current-page="schedulerPagination.page"
+              v-model:page-size="schedulerPagination.size"
+              :page-sizes="[10, 20, 50, 100]"
+              :total="schedulerPagination.total"
+              layout="total, sizes, prev, pager, next, jumper"
+              @size-change="handleSchedulerSizeChange"
+              @current-change="handleSchedulerCurrentChange"
+            />
+          </div>
         </el-card>
       </el-col>
     </el-row>
@@ -252,6 +265,11 @@ const schedulerTasks = ref([])
 const schedulerInfo = ref({
   running: false,
   total_tasks: 0
+})
+const schedulerPagination = ref({
+  page: 1,
+  size: 10,
+  total: 0
 })
 
 const loading = ref(false)
@@ -325,17 +343,52 @@ const fetchIPControlStatus = async () => {
 const fetchSchedulerTasks = async () => {
   schedulerLoading.value = true
   try {
-    const response = await jobApi.getSchedulerTasks()
-    schedulerTasks.value = response.data.tasks || []
-    schedulerInfo.value = {
-      running: response.data.running || false,
-      total_tasks: response.data.total_tasks || 0
+    const params = {
+      page: schedulerPagination.value.page,
+      size: schedulerPagination.value.size
+    }
+    const response = await jobApi.getSchedulerTasks(params)
+    
+    if (response.data && response.data.tasks) {
+      // 新格式
+      schedulerTasks.value = response.data.tasks || []
+      schedulerPagination.value.total = response.data.total_tasks || 0
+      schedulerInfo.value = {
+        running: response.data.scheduler_running || false,
+        total_tasks: response.data.total_tasks || 0
+      }
+    } else if (Array.isArray(response.data)) {
+      // 旧格式兼容
+      schedulerTasks.value = response.data || []
+      schedulerPagination.value.total = response.total || 0
+      schedulerInfo.value = {
+        running: true,
+        total_tasks: response.total || 0
+      }
+    } else {
+      // 默认处理
+      schedulerTasks.value = []
+      schedulerPagination.value.total = 0
+      schedulerInfo.value = {
+        running: false,
+        total_tasks: 0
+      }
     }
   } catch (error) {
     ElMessage.error('获取调度器任务失败: ' + error.message)
   } finally {
     schedulerLoading.value = false
   }
+}
+
+const handleSchedulerSizeChange = (size) => {
+  schedulerPagination.value.size = size
+  fetchSchedulerTasks()
+}
+
+const handleSchedulerCurrentChange = (page) => {
+  schedulerPagination.value.page = page
+  fetchSchedulerTasks()
 }
 
 const handleCalibrateJobs = async () => {

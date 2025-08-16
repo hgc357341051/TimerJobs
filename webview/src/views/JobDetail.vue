@@ -71,34 +71,39 @@
           <template #header>
             <div class="card-header">
               <span>执行记录</span>
-              <el-button link @click="loadExecutions">
+              <el-button link @click="loadExecutions()">
                 <el-icon><Refresh /></el-icon>
               </el-button>
             </div>
           </template>
           
-          <el-timeline v-loading="execLoading">
-            <el-timeline-item
-              v-for="exec in executions"
-              :key="exec.id"
-              :timestamp="formatTime(exec.created_at)"
-              :type="exec.status === 'success' ? 'success' : 'danger'"
-            >
-              <div>
-                <div>状态: 
-                  <el-tag :type="exec.status === 'success' ? 'success' : 'danger'" size="small">
-                    {{ exec.status }}
-                  </el-tag>
-                </div>
-                <div v-if="exec.duration">耗时: {{ exec.duration }}ms</div>
-                <div v-if="exec.error_msg" class="error-msg">
-                  错误: {{ exec.error_msg }}
-                </div>
-              </div>
-            </el-timeline-item>
-          </el-timeline>
+          <div v-if="executions && executions.exec_id" class="execution-result">
+            <el-descriptions :column="2" border>
+              <el-descriptions-item label="执行ID">{{ executions.exec_id }}</el-descriptions-item>
+              <el-descriptions-item label="状态">
+                <el-tag :type="executions.status === '成功' ? 'success' : 'danger'">
+                  {{ executions.status }}
+                </el-tag>
+              </el-descriptions-item>
+              <el-descriptions-item label="开始时间">{{ formatTime(executions.time) }}</el-descriptions-item>
+              <el-descriptions-item label="结束时间">{{ formatTime(executions.end_time) }}</el-descriptions-item>
+              <el-descriptions-item label="耗时">{{ executions.duration_ms }}ms</el-descriptions-item>
+              <el-descriptions-item label="执行模式">{{ executions.mode }}</el-descriptions-item>
+              <el-descriptions-item label="执行来源">{{ executions.source === 'manual' ? '手动执行' : '自动调度' }}</el-descriptions-item>
+            </el-descriptions>
+            
+            <div v-if="executions.stdout" style="margin-top: 20px;">
+              <h4>执行输出:</h4>
+              <el-input
+                v-model="executions.stdout"
+                type="textarea"
+                :rows="4"
+                readonly
+              />
+            </div>
+          </div>
           
-          <div v-if="executions.length === 0" class="empty-state">
+          <div v-if="!executions || !executions.exec_id" class="empty-state">
             <el-empty description="暂无执行记录" />
           </div>
         </el-card>
@@ -116,12 +121,26 @@
           <div class="logs-container" v-loading="logsLoading">
             <div 
               v-for="log in logs" 
-              :key="log.id"
+              :key="log.exec_id"
               class="log-item"
-              :class="`log-${log.level}`"
             >
-              <div class="log-time">{{ formatTime(log.time) }}</div>
-              <div class="log-message">{{ log.message }}</div>
+              <div class="log-header">
+                <span class="log-time">{{ formatTime(log.time) }}</span>
+                <el-tag :type="log.status === '成功' ? 'success' : 'danger'" size="small">
+                  {{ log.status }}
+                </el-tag>
+                <span class="log-source">{{ log.source === 'cron' ? '定时' : '手动' }}</span>
+              </div>
+              
+              <div v-if="log.stdout" class="log-output">
+                <div class="log-section-title">标准输出：</div>
+                <pre class="log-content">{{ log.stdout }}</pre>
+              </div>
+              
+              <div v-if="log.stderr" class="log-error">
+                <div class="log-section-title">错误输出：</div>
+                <pre class="log-content error">{{ log.stderr }}</pre>
+              </div>
             </div>
           </div>
           
@@ -172,16 +191,16 @@ const getModeText = (mode) => {
 
 const getStateText = (state) => {
   const stateMap = {
-    0: '已停止',
+    0: '等待',
     1: '运行中',
-    2: '异常'
+    2: '已停止'
   }
   return stateMap[state] || '未知'
 }
 
 const getStateType = (state) => {
   const typeMap = {
-    0: 'info',
+    0: 'warning',
     1: 'success',
     2: 'danger'
   }
@@ -205,10 +224,10 @@ const loadJobDetail = async () => {
   }
 }
 
-const loadExecutions = async () => {
+const loadExecutions = async (exec_id) => {
   execLoading.value = true
   try {
-    const response = await jobApi.getExecByID(route.params.id)
+    const response = await jobApi.getExecByID(route.params.id,exec_id)
     executions.value = response.data || []
   } catch (error) {
     ElMessage.error('加载执行记录失败: ' + error.message)
@@ -235,9 +254,18 @@ const loadLogs = async () => {
 const runJob = async () => {
   loading.value = true
   try {
-    await jobApi.runJob(job.value.id)
-    ElMessage.success('任务已开始执行')
-    await loadExecutions()
+    const response = await jobApi.runJob(job.value.id)
+    const result = response.data || {}
+    console.log('runJob', result)
+    if (result.skipped) {
+      ElMessage.warning('任务已被跳过执行')
+    } else {
+      ElMessage.success('任务已开始执行')
+      // 如果有exec_id，可以立即查询该执行记录
+      if (result.exec_id) {
+        setTimeout(() => loadExecutions(result.exec_id), 1000) // 延迟1秒后刷新执行记录
+      }
+    }
   } catch (error) {
     ElMessage.error('执行任务失败: ' + error.message)
   } finally {
@@ -251,11 +279,23 @@ const toggleJobState = async () => {
     if (job.value.state === 1) {
       await jobApi.stopJob(job.value.id)
       ElMessage.success('任务已停止')
+      await loadJobDetail()
     } else {
-      await jobApi.runJob(job.value.id)
-      ElMessage.success('任务已启动')
+      const response = await jobApi.runJob(job.value.id)
+      const result = response.data || {}
+      
+      if (result.skipped) {
+        ElMessage.warning('任务已被跳过启动')
+      } else {
+        ElMessage.success('任务已启动')
+        // 延迟刷新执行记录
+        if (result.exec_id) {
+          setTimeout(() => loadExecutions(result.exec_id), 1000)
+        }
+      
+      }
+      await loadJobDetail()
     }
-    await loadJobDetail()
   } catch (error) {
     ElMessage.error('操作失败: ' + error.message)
   } finally {
@@ -347,6 +387,47 @@ onMounted(() => {
 }
 
 .log-error .log-message {
+  color: #f56c6c;
+}
+
+.log-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.log-source {
+  color: #909399;
+  font-size: 12px;
+}
+
+.log-output,
+.log-error {
+  margin: 8px 0;
+}
+
+.log-section-title {
+  font-weight: bold;
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: #606266;
+}
+
+.log-content {
+  background-color: #f5f7fa;
+  padding: 8px;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 0;
+}
+
+.log-content.error {
+  background-color: #fef0f0;
   color: #f56c6c;
 }
 

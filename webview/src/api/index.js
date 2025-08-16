@@ -71,6 +71,29 @@ export const systemApi = {
   // 移除黑名单IP
   removeFromBlacklist(ip) {
     return api.post('/jobs/ip-control/blacklist/remove', { ip })
+  },
+
+  // 获取IP控制列表
+  getIpControls() {
+    return api.get('/jobs/ip-control/status')
+  },
+
+  // 添加IP控制
+  addIpControl(ip, type) {
+    if (type === 'whitelist') {
+      return this.addToWhitelist(ip)
+    } else if (type === 'blacklist') {
+      return this.addToBlacklist(ip)
+    }
+  },
+
+  // 移除IP控制
+  removeIpControl(ip, type) {
+    if (type === 'whitelist') {
+      return this.removeFromWhitelist(ip)
+    } else if (type === 'blacklist') {
+      return this.removeFromBlacklist(ip)
+    }
   }
 }
 
@@ -132,13 +155,13 @@ export const jobApi = {
   },
   
   // 获取任务执行记录
-  getExecByID(id) {
-    return api.get('/jobs/execs', { params: { id } })
+  getExecByID(id,exec_id) {
+    return api.get('/jobs/execs', { params: { id,exec_id} })
   },
   
   // 清除日志
-  clearLogs() {
-    return api.post('/jobs/logs/clear')
+  clearLogs(data) {
+    return api.post('/jobs/logs/clear', data)
   },
   
   // 获取任务状态
@@ -147,8 +170,8 @@ export const jobApi = {
   },
   
   // 获取调度器任务
-  getSchedulerTasks() {
-    return api.get('/jobs/scheduler')
+  getSchedulerTasks(params = {}) {
+    return api.get('/jobs/scheduler', { params })
   },
   
   // 校准任务列表

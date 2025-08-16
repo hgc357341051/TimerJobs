@@ -39,7 +39,7 @@ type LogEntry struct {
 // 字段含义见各接口注释
 // 示例：{"name":"测试任务","desc":"描述","cron_expr":"* * * * * *","mode":"command","command":"echo hello","state":0,"allow_mode":0,"max_run_count":0}
 type JobRequest struct {
-	ID          uint   `form:"id" json:"id"`
+	ID          *uint  `form:"id" json:"id,omitempty"`
 	Name        string `form:"name" json:"name"`
 	Desc        string `form:"desc,omitempty" json:"desc,omitempty"`
 	CronExpr    string `form:"cron_expr" json:"cron_expr"`
@@ -76,13 +76,14 @@ type JobRunRequest struct {
 
 // JobLogsRequest 日志查询结构体
 // 用于任务日志查询接口
-// 示例：{"id":1,"date":"2025-06-25","limit":3}
+// 示例：{"id":1,"date":"2025-06-25","limit":3,"order":"desc"}
 type JobLogsRequest struct {
 	ID    uint   `json:"id" binding:"required"`
 	Date  string `json:"date"`
 	Limit int    `json:"limit"`
 	Page  int    `form:"page" json:"page"`
 	Size  int    `form:"size" json:"size"`
+	Order string `json:"order"` // asc: 正序, desc: 倒序(默认)
 }
 
 // IPRequest IP白/黑名单结构体
@@ -187,7 +188,7 @@ func (*Index) DeleteJob(c *gin.Context) {
 	if !bindAndValidate(c, &jobReq) {
 		return
 	}
-	job := jobs.Jobs{ID: jobReq.ID}
+	job := jobs.Jobs{ID: *jobReq.ID}
 	if err := global.DB.First(&job).Error; err != nil {
 		funcs.No(c, "任务未找到："+err.Error(), nil)
 		return
@@ -222,7 +223,7 @@ func (*Index) StopJob(c *gin.Context) {
 	if !bindAndValidate(c, &jobReq) {
 		return
 	}
-	job := jobs.Jobs{ID: jobReq.ID}
+	job := jobs.Jobs{ID: *jobReq.ID}
 	if err := global.DB.First(&job).Error; err != nil {
 		funcs.No(c, "任务未找到："+err.Error(), nil)
 		return
@@ -259,7 +260,7 @@ func (*Index) JobInfo(c *gin.Context) {
 	if !bindAndValidate(c, &jobReq) {
 		return
 	}
-	job := jobs.Jobs{ID: jobReq.ID}
+	job := jobs.Jobs{ID: *jobReq.ID}
 	if err := global.DB.First(&job).Error; err != nil {
 		funcs.No(c, "任务未找到："+err.Error(), nil)
 		return
@@ -274,6 +275,9 @@ func (*Index) JobInfo(c *gin.Context) {
 // @Produce json
 // @Param page query int false "页码" default(1)
 // @Param size query int false "每页数量" default(10)
+// @Param name query string false "任务名称"
+// @Param state query int false "任务状态: 0等待 1运行中 2已停止"
+// @Param mode query string false "执行模式: http command func"
 // @Success 200 {object} function.PageData "分页数据"
 // @Failure 400 {object} function.JsonData "参数错误"
 // @Router /jobs/list [get]
@@ -291,12 +295,34 @@ func (*Index) JobList(c *gin.Context) {
 	var jobList []jobs.Jobs
 	offset := (jobReq.Page - 1) * jobReq.Size
 	limit := jobReq.Size
+
+	// 构建查询条件
+	query := global.DB.Model(&jobs.Jobs{})
+
+	// 按任务名称筛选
+	if jobReq.Name != "" {
+		query = query.Where("name LIKE ?", "%"+jobReq.Name+"%")
+	}
+
+	// 按任务状态筛选
+	if jobReq.State >= 0 && jobReq.State <= 2 {
+		query = query.Where("state = ?", jobReq.State)
+	}
+
+	// 按执行模式筛选
+	if jobReq.Mode != "" {
+		query = query.Where("mode = ?", jobReq.Mode)
+	}
+
+	// 查询总数
 	var total int64
-	if err := global.DB.Model(&jobs.Jobs{}).Count(&total).Error; err != nil {
+	if err := query.Count(&total).Error; err != nil {
 		funcs.No(c, "查询任务总数失败："+err.Error(), nil)
 		return
 	}
-	if err := global.DB.Offset(int(offset)).Limit(int(limit)).Find(&jobList).Error; err != nil {
+
+	// 查询列表数据（按ID倒序排列，最新的在前面）
+	if err := query.Order("id DESC").Offset(int(offset)).Limit(int(limit)).Find(&jobList).Error; err != nil {
 		funcs.No(c, "查询任务列表失败："+err.Error(), nil)
 		return
 	}
@@ -402,10 +428,55 @@ func (*Index) JobRun(c *gin.Context) {
 // @Produce json
 // @Success 200 {object} function.JsonData "成功响应"
 // @Router /jobs/runAll [post]
-func (*Index) JobRunAll(c *gin.Context) {
+func (i *Index) JobRunAll(c *gin.Context) {
 
 	global.Timer.Start()
 	global.TimerRunning = true
+	// 查询所有状态为0或1的任务
+	var dbJobs []jobs.Jobs
+	if err := global.DB.Where("state IN (?)", []int{0, 1}).Find(&dbJobs).Error; err != nil {
+		funcs.No(c, "查询任务失败: "+err.Error(), nil)
+		return
+	}
+
+	// 创建数据库中有效任务ID的集合
+	validJobIDs := make(map[uint]bool)
+	for _, job := range dbJobs {
+		validJobIDs[job.ID] = true
+	}
+
+	// 检查当前TaskList中的任务是否在有效任务中
+	for taskID := range global.TaskList {
+		if _, exists := validJobIDs[taskID]; !exists {
+			// 任务不在有效列表中，需要移除
+			if err := global.RemoveJob(taskID); err != nil {
+				global.ZapLog.Error("移除无效任务失败",
+					global.LogField("taskID", taskID),
+					global.LogError(err))
+				// 记录错误但继续处理其他任务
+			} else {
+				global.ZapLog.Info("已移除无效任务",
+					global.LogField("taskID", taskID))
+			}
+		}
+	}
+
+	// 添加缺失的任务
+	for _, job := range dbJobs {
+		if _, exists := global.TaskList[job.ID]; !exists {
+			if err := global.AddJob(&job); err != nil {
+				global.ZapLog.Error("添加任务失败",
+					global.LogField("jobID", job.ID),
+					global.LogField("jobName", job.Name),
+					global.LogError(err))
+				// 记录错误但继续处理其他任务
+			} else {
+				global.ZapLog.Info("已添加缺失任务",
+					global.LogField("jobID", job.ID),
+					global.LogField("jobName", job.Name))
+			}
+		}
+	}
 	funcs.Ok(c, "任务调度器启动成功", nil)
 }
 
@@ -419,6 +490,8 @@ func (*Index) JobRunAll(c *gin.Context) {
 func (*Index) JobStopAll(c *gin.Context) {
 
 	global.StopTimer()
+	global.TimerRunning = false
+
 	funcs.Ok(c, "任务调度器停止成功", nil)
 }
 
@@ -626,7 +699,6 @@ func (*Index) LogSwitchState(c *gin.Context) {
 
 	funcs.Ok(c, "获取日志开关状态成功", gin.H{
 		"zapLogSwitch": config.Logs.ZapLogSwitch,
-		"jobLogSwitch": config.Logs.ZapLogSwitch, // 使用相同的开关
 	})
 }
 
@@ -694,15 +766,38 @@ func (i *Index) CalibrateJobList(c *gin.Context) {
 // @Tags 任务管理
 // @Accept json
 // @Produce json
+// @Param page query int false "页码，默认1"
+// @Param size query int false "每页条数，默认10"
 // @Success 200 {object} function.JsonData "成功响应"
-// @Failure 404 {object} function.JsonData "参数错误"
+// @Failure 400 {object} function.JsonData "参数错误"
 // @Router /jobs/scheduler [get]
 func (*Index) GetSchedulerTasks(c *gin.Context) {
+	// 解析分页参数
+	type JobSchedulerRequest struct {
+		Date string `form:"date" json:"date"`
+		Page int    `form:"page" json:"page"`
+		Size int    `form:"size" json:"size"`
+	}
+
+	var req JobSchedulerRequest
+	if err := c.ShouldBind(&req); err != nil {
+		funcs.No(c, "参数错误："+err.Error(), nil)
+		return
+	}
+
+	// 默认值处理
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.Size <= 0 {
+		req.Size = 10
+	}
+
 	// 获取调度器中的任务条目
 	entries := global.Timer.Entries()
 
-	// 构建任务列表
-	var taskList []map[string]interface{}
+	// 构建完整任务列表
+	var allTasks []map[string]interface{}
 
 	for _, entry := range entries {
 		// 从TaskList中查找对应的任务ID
@@ -731,16 +826,37 @@ func (*Index) GetSchedulerTasks(c *gin.Context) {
 				"created_at": job.CreatedAt,
 				"updated_at": job.UpdatedAt,
 			}
-			taskList = append(taskList, taskInfo)
+			allTasks = append(allTasks, taskInfo)
 		}
 	}
 
-	// 返回调度器状态和任务列表
-	funcs.Ok(c, "获取调度器任务列表成功", gin.H{
+	// 分页处理
+	total := len(allTasks)
+	totalPages := (total + req.Size - 1) / req.Size
+	start := (req.Page - 1) * req.Size
+	end := req.Page * req.Size
+
+	if start > total {
+		start = total
+	}
+	if end > total {
+		end = total
+	}
+
+	var pageTasks []map[string]interface{}
+	if start < end {
+		pageTasks = allTasks[start:end]
+	} else {
+		pageTasks = []map[string]interface{}{}
+	}
+
+	// 返回分页结果
+	responseData := map[string]interface{}{
 		"scheduler_running": global.IsTimerRunning(),
 		"total_tasks":       len(entries),
-		"tasks":             taskList,
-	})
+		"tasks":             pageTasks,
+	}
+	funcs.JsonPage(c, "获取调度器任务列表成功", responseData, int64(total), int64(totalPages), req.Page, req.Size)
 }
 
 // @Summary 获取可用函数列表
