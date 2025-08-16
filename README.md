@@ -111,6 +111,9 @@ npm run build
 # 构建产物位于 webview/dist 目录
 # 包含：静态HTML、CSS、JS文件
 ```
+![微信截图_20250816170140](https://github.com/user-attachments/assets/cf93dffe-507a-41ff-844c-c39532f5ce8d)
+![微信截图_20250816170140](https://github.com/user-attachments/assets/4ab7cdaa-4d98-4743-b3fb-ed80d0935ce5)
+![微信截图_20250816170029](https://github.com/user-attachments/assets/dbf59b9e-ec11-4c7a-9303-1a37eeffbe65)
 
 ### 前后端集成部署
 
