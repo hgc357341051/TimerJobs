@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "xiaohu-jobs": {
+      "command": "d:\\1\\app\\jobs\\bin\\xiaohu-mcp-stdio.exe",
+      "args": [],
+      "env": {},
+      "description": "小胡定时任务管理MCP服务",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  }
+}

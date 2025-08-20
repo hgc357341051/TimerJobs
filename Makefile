@@ -2,7 +2,7 @@
 
 # 变量定义
 APP_NAME = jobs
-VERSION = 1.1.0
+VERSION = 1.2.0
 BUILD_TIME = $(shell date +%Y-%m-%d_%H:%M:%S)
 GIT_COMMIT = $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
@@ -232,6 +232,32 @@ version:
 	@echo "Go版本: $(shell go version)"
 	@echo "操作系统: $(GOOS)/$(GOARCH)"
 
+# MCP服务器相关命令
+mcp-build:
+	@echo "构建MCP服务器..."
+	@mkdir -p $(BUILD_DIR)
+	$(GO) build $(LDFLAGS) -o $(BUILD_DIR)/mcp.exe mcp/main.go
+	@echo "MCP服务器构建完成: $(BUILD_DIR)/mcp.exe"
+
+mcp-run:
+	@echo "启动MCP服务器..."
+	$(GO) run mcp/main.go -port 8081
+
+mcp-test:
+	@echo "测试MCP服务器..."
+	@if command -v python >/dev/null 2>&1; then \
+		python mcp/test_mcp.py; \
+	else \
+		echo "Python 未安装，跳过测试"; \
+	fi
+
+mcp-start:
+	@echo "启动MCP服务器..."
+	./$(BUILD_DIR)/mcp.exe -port 8081
+
+# 一键构建并测试MCP
+mcp-all: mcp-build mcp-test
+
 # Go项目Makefile，支持Windows下sqlite3自动编译
 
 BINARY_NAME = xiaohuAdmin.exe
@@ -250,4 +276,4 @@ build:
 
 clean:
 	@del /f /q $(BINARY_NAME) 2>nul || exit 0
-	@echo "[INFO] 已清理编译产物" 
+	@echo "[INFO] 已清理编译产物"
