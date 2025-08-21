@@ -529,7 +529,10 @@ func getJobsResource(ctx context.Context, request mcp.ReadResourceRequest) ([]mc
 	}
 
 	// 将结果转换为JSON字符串
-	resultJSON, _ := json.MarshalIndent(result, "", "  ")
+	resultJSON, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal result: %v", err)
+	}
 
 	return []mcp.ResourceContents{
 		mcp.TextResourceContents{
@@ -547,7 +550,10 @@ func getSystemStatusResource(ctx context.Context, request mcp.ReadResourceReques
 	}
 
 	// 将结果转换为JSON字符串
-	resultJSON, _ := json.MarshalIndent(result, "", "  ")
+	resultJSON, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal result: %v", err)
+	}
 
 	return []mcp.ResourceContents{
 		mcp.TextResourceContents{
@@ -587,7 +593,10 @@ func listJobsTool(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallTo
 		return mcp.NewToolResultError("API error: " + apiResp.Msg), nil
 	}
 
-	jobsData, _ := json.MarshalIndent(apiResp.Data, "", "  ")
+	jobsData, err := json.MarshalIndent(apiResp.Data, "", "  ")
+	if err != nil {
+		return mcp.NewToolResultError("Failed to marshal jobs data: " + err.Error()), nil
+	}
 	return mcp.NewToolResultText(string(jobsData)), nil
 }
 
@@ -633,9 +642,14 @@ func getJobTool(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallTool
 	}
 
 	// 转换数据格式
-	jobData, _ := json.Marshal(apiResp.Data)
+	jobData, err := json.Marshal(apiResp.Data)
+	if err != nil {
+		return mcp.NewToolResultError("Failed to marshal job data: " + err.Error()), nil
+	}
 	var job Job
-	json.Unmarshal(jobData, &job)
+	if err := json.Unmarshal(jobData, &job); err != nil {
+		return mcp.NewToolResultError("Failed to unmarshal job data: " + err.Error()), nil
+	}
 
 	result := map[string]interface{}{
 		"id":            strconv.Itoa(int(job.ID)),
@@ -653,7 +667,10 @@ func getJobTool(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallTool
 		"updated_at":    job.UpdatedAt.Format(time.RFC3339),
 	}
 
-	jsonData, _ := json.MarshalIndent(result, "", "  ")
+	jsonData, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return mcp.NewToolResultError("Failed to marshal result: " + err.Error()), nil
+	}
 	return mcp.NewToolResultText(string(jsonData)), nil
 }
 
@@ -695,7 +712,10 @@ func createJobTool(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallT
 		}
 	}
 
-	jsonData, _ := json.Marshal(jobData)
+	jsonData, err := json.Marshal(jobData)
+	if err != nil {
+		return mcp.NewToolResultError("Failed to marshal job data: " + err.Error()), nil
+	}
 	resp, err := makeAPIRequest("POST", "/jobs/create", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return mcp.NewToolResultError("Failed to connect to API: " + err.Error()), nil
@@ -711,7 +731,10 @@ func createJobTool(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallT
 		return mcp.NewToolResultError("API error: " + apiResp.Msg), nil
 	}
 
-	resultData, _ := json.MarshalIndent(apiResp.Data, "", "  ")
+	resultData, err := json.MarshalIndent(apiResp.Data, "", "  ")
+	if err != nil {
+		return mcp.NewToolResultError("Failed to marshal result data: " + err.Error()), nil
+	}
 	return mcp.NewToolResultText(string(resultData)), nil
 }
 
