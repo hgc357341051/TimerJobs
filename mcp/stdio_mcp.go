@@ -450,16 +450,16 @@ func addTools(s *server.MCPServer) {
 			mcp.Description("Execution ID to query"),
 			mcp.Required(),
 		),
+		mcp.WithString("job_id",
+			mcp.Description("Job ID corresponding to the execution"),
+			mcp.Required(),
+		),
 	), getJobExecutionsTool)
 
 	// Get system log switch status tool
 	s.AddTool(mcp.NewTool("get_log_switch_status",
 		mcp.WithDescription("Get system log switch status"),
 	), getLogSwitchStatusTool)
-
-	// 删除get_system_status工具，因为对应的API路径不存在
-
-	// 删除get_task_status和get_database_info工具，因为对应的API路径不存在
 
 	// Get scheduler tasks tool
 	s.AddTool(mcp.NewTool("get_scheduler_tasks",
@@ -490,10 +490,6 @@ func addResources(s *server.MCPServer) {
 		"System Configuration",
 		mcp.WithMIMEType("application/json"),
 	), handleConfigResource)
-}
-
-func addPrompts(s *server.MCPServer) {
-
 }
 
 // HTTP请求辅助函数
@@ -662,51 +658,51 @@ func createJobTool(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallT
 
 		// 构建HTTP任务配置字符串，与前端保持一致
 		var config strings.Builder
-		
+
 		if url != "" {
 			config.WriteString("【url】" + url + "\n")
 		}
-		
+
 		if httpMode != "" && strings.ToUpper(httpMode) != "GET" {
 			config.WriteString("【mode】" + strings.ToUpper(httpMode) + "\n")
 		}
-		
+
 		if headers != "" {
 			config.WriteString("【headers】" + headers + "\n")
 		}
-		
+
 		if data != "" {
 			config.WriteString("【data】" + data + "\n")
 		}
-		
+
 		if cookies != "" {
 			config.WriteString("【cookies】" + cookies + "\n")
 		}
-		
+
 		if proxy != "" {
 			config.WriteString("【proxy】" + proxy + "\n")
 		}
-		
+
 		if times > 0 {
 			config.WriteString("【times】" + strconv.Itoa(times) + "\n")
 		}
-		
+
 		if interval > 0 {
 			config.WriteString("【interval】" + strconv.Itoa(interval) + "\n")
 		}
-		
+
 		if result != "" {
 			config.WriteString("【result】" + result + "\n")
 		}
-		
+
 		if timeout != 60 {
 			config.WriteString("【timeout】" + strconv.Itoa(timeout) + "\n")
 		}
-		
+
 		if config.Len() > 0 {
 			command = config.String()
 		}
-		
+
 	} else if mode == "command" {
 		// 命令任务配置
 		cmd := request.GetString("cmd", "")
@@ -718,35 +714,35 @@ func createJobTool(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallT
 
 		// 构建命令任务配置字符串，与前端保持一致
 		var config strings.Builder
-		
+
 		if cmd != "" {
 			config.WriteString("【command】" + cmd + "\n")
 		}
-		
+
 		if workdir != "" {
 			config.WriteString("【workdir】" + workdir + "\n")
 		}
-		
+
 		if env != "" {
 			config.WriteString("【env】" + env + "\n")
 		}
-		
+
 		if times > 0 {
 			config.WriteString("【times】" + strconv.Itoa(times) + "\n")
 		}
-		
+
 		if interval > 0 {
 			config.WriteString("【interval】" + strconv.Itoa(interval) + "\n")
 		}
-		
+
 		if timeout != 30 {
 			config.WriteString("【timeout】" + strconv.Itoa(timeout) + "\n")
 		}
-		
+
 		if config.Len() > 0 {
 			command = config.String()
 		}
-		
+
 	} else if mode == "func" {
 		// 函数任务配置
 		funcName := request.GetString("func_name", "")
@@ -756,23 +752,23 @@ func createJobTool(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallT
 
 		// 构建函数任务配置字符串，与前端保持一致
 		var config strings.Builder
-		
+
 		if funcName != "" {
 			config.WriteString("【name】" + funcName + "\n")
 		}
-		
+
 		if arg != "" {
 			config.WriteString("【arg】" + arg + "\n")
 		}
-		
+
 		if times > 0 {
 			config.WriteString("【times】" + strconv.Itoa(times) + "\n")
 		}
-		
+
 		if interval > 0 {
 			config.WriteString("【interval】" + strconv.Itoa(interval) + "\n")
 		}
-		
+
 		if config.Len() > 0 {
 			command = config.String()
 		}
@@ -852,7 +848,7 @@ func updateJobTool(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallT
 	}
 
 	mode := request.GetString("mode", "")
-	
+
 	// 根据任务类型处理详细配置，与前端Jobs.vue保持一致
 	currentMode := mode
 	if currentMode == "" {
@@ -875,52 +871,52 @@ func updateJobTool(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallT
 
 		// 构建HTTP任务配置字符串，与前端保持一致
 		var config strings.Builder
-		
+
 		if url != "" {
 			config.WriteString("【url】" + url + "\n")
 		}
-		
+
 		if httpMode != "" && strings.ToUpper(httpMode) != "GET" {
 			config.WriteString("【mode】" + strings.ToUpper(httpMode) + "\n")
 		}
-		
+
 		if headers != "" {
 			config.WriteString("【headers】" + headers + "\n")
 		}
-		
+
 		if data != "" {
 			config.WriteString("【data】" + data + "\n")
 		}
-		
+
 		if cookies != "" {
 			config.WriteString("【cookies】" + cookies + "\n")
 		}
-		
+
 		if proxy != "" {
 			config.WriteString("【proxy】" + proxy + "\n")
 		}
-		
+
 		if times > 0 {
 			config.WriteString("【times】" + strconv.Itoa(times) + "\n")
 		}
-		
+
 		if interval > 0 {
 			config.WriteString("【interval】" + strconv.Itoa(interval) + "\n")
 		}
-		
+
 		if result != "" {
 			config.WriteString("【result】" + result + "\n")
 		}
-		
+
 		if timeout > 0 {
 			config.WriteString("【timeout】" + strconv.Itoa(timeout) + "\n")
 		}
-		
+
 		// 使用构建的配置字符串作为command
 		if config.Len() > 0 {
 			updateData["command"] = config.String()
 		}
-		
+
 	} else if currentMode == "command" {
 		// 命令任务配置
 		cmd := request.GetString("cmd", "")
@@ -932,36 +928,36 @@ func updateJobTool(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallT
 
 		// 构建命令任务配置字符串，与前端保持一致
 		var config strings.Builder
-		
+
 		if cmd != "" {
 			config.WriteString("【command】" + cmd + "\n")
 		}
-		
+
 		if workdir != "" {
 			config.WriteString("【workdir】" + workdir + "\n")
 		}
-		
+
 		if env != "" {
 			config.WriteString("【env】" + env + "\n")
 		}
-		
+
 		if times > 0 {
 			config.WriteString("【times】" + strconv.Itoa(times) + "\n")
 		}
-		
+
 		if interval > 0 {
 			config.WriteString("【interval】" + strconv.Itoa(interval) + "\n")
 		}
-		
+
 		if timeout > 0 {
 			config.WriteString("【timeout】" + strconv.Itoa(timeout) + "\n")
 		}
-		
+
 		// 使用构建的配置字符串作为command
 		if config.Len() > 0 {
 			updateData["command"] = config.String()
 		}
-		
+
 	} else if currentMode == "func" {
 		// 函数任务配置
 		funcName := request.GetString("func_name", "")
@@ -971,23 +967,23 @@ func updateJobTool(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallT
 
 		// 构建函数任务配置字符串，与前端保持一致
 		var config strings.Builder
-		
+
 		if funcName != "" {
 			config.WriteString("【name】" + funcName + "\n")
 		}
-		
+
 		if arg != "" {
 			config.WriteString("【arg】" + arg + "\n")
 		}
-		
+
 		if times > 0 {
 			config.WriteString("【times】" + strconv.Itoa(times) + "\n")
 		}
-		
+
 		if interval > 0 {
 			config.WriteString("【interval】" + strconv.Itoa(interval) + "\n")
 		}
-		
+
 		// 使用构建的配置字符串作为command
 		if config.Len() > 0 {
 			updateData["command"] = config.String()
@@ -1148,8 +1144,19 @@ func getJobLogsTool(ctx context.Context, request mcp.CallToolRequest) (*mcp.Call
 		return mcp.NewToolResultError("job_id is required"), nil
 	}
 
-	endpoint := fmt.Sprintf("/jobs/logs?id=%s&limit=%d", jobID, limit)
-	resp, err := makeAPIRequest("POST", endpoint, nil)
+	// 将字符串job_id转换为uint
+	jobIDUint, err := strconv.ParseUint(jobID, 10, 32)
+	if err != nil {
+		return mcp.NewToolResultError("Invalid job_id format: " + err.Error()), nil
+	}
+
+	logData := map[string]interface{}{
+		"id":    uint(jobIDUint),
+		"limit": limit,
+	}
+
+	jsonData, _ := json.Marshal(logData)
+	resp, err := makeAPIRequest("POST", "/jobs/logs", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return mcp.NewToolResultError("Failed to connect to API: " + err.Error()), nil
 	}
@@ -1299,7 +1306,28 @@ func runJobTool(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallTool
 		return mcp.NewToolResultError("API error: " + apiResp.Msg), nil
 	}
 
-	return mcp.NewToolResultText(fmt.Sprintf("Job %s run successfully: %s", jobID, apiResp.Msg)), nil
+	// 解析响应数据中的exec_id
+	var resultData map[string]interface{}
+	if dataBytes, err := json.Marshal(apiResp.Data); err == nil {
+		json.Unmarshal(dataBytes, &resultData)
+	}
+
+	execID := ""
+	if resultData != nil {
+		if id, ok := resultData["exec_id"].(string); ok {
+			execID = id
+		}
+	}
+
+	response := map[string]interface{}{
+		"job_id":  jobID,
+		"status":  "success",
+		"message": apiResp.Msg,
+		"exec_id": execID,
+	}
+
+	jsonResponse, _ := json.MarshalIndent(response, "", "  ")
+	return mcp.NewToolResultText(string(jsonResponse)), nil
 }
 
 func restartJobTool(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -1683,15 +1711,31 @@ func getJobExecutionsTool(ctx context.Context, request mcp.CallToolRequest) (*mc
 		return mcp.NewToolResultError("exec_id is required"), nil
 	}
 
-	endpoint := fmt.Sprintf("/jobs/exec?exec_id=%s", execID)
+	jobID := request.GetString("job_id", "")
+	if jobID == "" {
+		return mcp.NewToolResultError("job_id is required"), nil
+	}
+
+	// 验证job_id是否为数字
+	if _, err := strconv.Atoi(jobID); err != nil {
+		return mcp.NewToolResultError("Invalid job_id format: must be a number"), nil
+	}
+
+	endpoint := fmt.Sprintf("/jobs/execs?id=%s&exec_id=%s", jobID, execID)
 	resp, err := makeAPIRequest("GET", endpoint, nil)
 	if err != nil {
 		return mcp.NewToolResultError("Failed to connect to API: " + err.Error()), nil
 	}
 	defer resp.Body.Close()
 
+	// 读取原始响应用于调试
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return mcp.NewToolResultError("Failed to read response body: " + err.Error()), nil
+	}
+
 	var apiResp APIResponse
-	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+	if err = json.Unmarshal(bodyBytes, &apiResp); err != nil {
 		return mcp.NewToolResultError("Failed to parse API response: " + err.Error()), nil
 	}
 
@@ -1699,7 +1743,16 @@ func getJobExecutionsTool(ctx context.Context, request mcp.CallToolRequest) (*mc
 		return mcp.NewToolResultError("API error: " + apiResp.Msg), nil
 	}
 
-	execData, _ := json.MarshalIndent(apiResp.Data, "", "  ")
+	// 确保 data 不为 nil
+	if apiResp.Data == nil {
+		return mcp.NewToolResultText("{}"), nil
+	}
+
+	execData, err := json.MarshalIndent(apiResp.Data, "", "  ")
+	if err != nil {
+		return mcp.NewToolResultError("Failed to marshal execution data: " + err.Error()), nil
+	}
+
 	return mcp.NewToolResultText(string(execData)), nil
 }
 
