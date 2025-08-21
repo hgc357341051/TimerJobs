@@ -1,6 +1,6 @@
 # 小胡定时任务系统（企业级）
 
-一个高可用、可扩展、支持多种执行模式的企业级定时任务管理系统，适用于自动化运维、定时数据处理、批量任务调度等场景。
+一个高可用、可扩展、支持多种执行模式的企业级定时任务管理系统，适用于自动化运维、定时数据处理、批量任务调度等场景。并且全网【唯一】一个支持AI智能体【MCP服务】的定时任务系统，支持定时任务的【智能体交互】。让AI帮你控制和操控定时任务系统，哪怕你会用，AI也会帮你使用。
 
 ---
 
@@ -73,6 +73,66 @@ go mod tidy
 - Swagger文档：http://127.0.0.1:36363/swagger/index.html
 - 健康检查：http://127.0.0.1:36363/jobs/health
 - 任务状态：http://127.0.0.1:36363/jobs/jobStatus
+
+---
+
+### MCP扩展开发
+
+#### 自定义智能函数
+在 `mcp/` 目录中添加自定义AI处理函数：
+
+```python
+# mcp/custom_intelligence.py
+class CustomIntelligence:
+    def analyze_task_performance(self, task_id):
+        """自定义任务性能分析"""
+        # 实现自定义分析逻辑
+        pass
+    
+    def predict_task_failure(self, task_config):
+        """预测任务失败概率"""
+        # 实现预测模型
+        pass
+```
+
+#### 集成机器学习模型
+```python
+# 集成预训练模型进行智能分析
+from transformers import pipeline
+
+class AIModelManager:
+    def __init__(self):
+        self.classifier = pipeline("text-classification")
+    
+    def classify_task_type(self, description):
+        """基于描述自动分类任务类型"""
+        return self.classifier(description)
+```
+
+### MCP测试与调试
+
+#### 运行测试套件
+```bash
+# 运行所有MCP功能测试
+python mcp/test_all_features.py
+
+# 运行特定测试
+python -m pytest mcp/tests/test_task_creation.py
+```
+
+#### 调试模式
+```bash
+# 启用调试日志
+export MCP_DEBUG=true
+python mcp/stdio_mcp.py --debug
+```
+
+### MCP安全考虑
+
+- **API访问控制**：MCP使用JWT token进行身份验证
+- **权限管理**：支持细粒度的操作权限控制
+- **数据脱敏**：敏感信息自动脱敏处理
+- **审计日志**：所有AI操作记录完整审计日志
 
 ---
 
@@ -657,66 +717,6 @@ MCP：基于当前任务分析：
 - 建议将非紧急任务调整到非高峰期
 - 推荐启用任务并行执行模式以提高效率
 ```
-
-### MCP扩展开发
-
-#### 自定义智能函数
-在 `mcp/` 目录中添加自定义AI处理函数：
-
-```python
-# mcp/custom_intelligence.py
-class CustomIntelligence:
-    def analyze_task_performance(self, task_id):
-        """自定义任务性能分析"""
-        # 实现自定义分析逻辑
-        pass
-    
-    def predict_task_failure(self, task_config):
-        """预测任务失败概率"""
-        # 实现预测模型
-        pass
-```
-
-#### 集成机器学习模型
-```python
-# 集成预训练模型进行智能分析
-from transformers import pipeline
-
-class AIModelManager:
-    def __init__(self):
-        self.classifier = pipeline("text-classification")
-    
-    def classify_task_type(self, description):
-        """基于描述自动分类任务类型"""
-        return self.classifier(description)
-```
-
-### MCP测试与调试
-
-#### 运行测试套件
-```bash
-# 运行所有MCP功能测试
-python mcp/test_all_features.py
-
-# 运行特定测试
-python -m pytest mcp/tests/test_task_creation.py
-```
-
-#### 调试模式
-```bash
-# 启用调试日志
-export MCP_DEBUG=true
-python mcp/stdio_mcp.py --debug
-```
-
-### MCP安全考虑
-
-- **API访问控制**：MCP使用JWT token进行身份验证
-- **权限管理**：支持细粒度的操作权限控制
-- **数据脱敏**：敏感信息自动脱敏处理
-- **审计日志**：所有AI操作记录完整审计日志
-
----
 
 ## 二次开发与扩展
 
