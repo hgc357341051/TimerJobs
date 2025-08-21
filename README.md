@@ -20,9 +20,15 @@ jobs/
 ├── middlewares/        # 中间件（认证、IP控制、CORS、限流等）
 ├── models/             # 数据模型
 ├── routers/            # 路由注册
+├── mcp/                # MCP AI智能体集成
+│   ├── stdio_mcp.go    # MCP服务器主程序
+│   ├── mcp_config.json # MCP配置文件
+│   ├── test_stdio_mcp.py # MCP测试脚本
+│   └── README.md       # MCP专用文档
 ├── runtime/            # 运行时日志、任务输出
 ├── main.go             # 主程序入口
-└── Dockerfile          # Docker部署文件
+├── Dockerfile          # Docker部署文件
+└── docker-compose.yml  # Docker编排文件
 ```
 
 ---
@@ -35,6 +41,7 @@ jobs/
 4. **日志管理**：系统日志、任务日志分离，支持查询与下载
 5. **IP控制**：支持白名单、黑名单，灵活配置
 6. **系统监控**：健康检查、任务状态、API文档自带
+7. **MCP AI智能体**：自然语言交互 → 智能任务创建 → 故障诊断 → 性能优化建议
 
 ---
 
@@ -518,6 +525,199 @@ CMD ["./main","start"]
 
 ---
 
+## MCP AI智能体集成
+
+小胡定时任务系统现已集成 **MCP (Model Context Protocol) AI智能体**，支持通过AI助手进行任务管理和系统控制，实现智能化的定时任务运维。
+
+### MCP智能体功能特性
+
+#### 1. 智能任务管理
+- **自然语言创建任务**：通过对话方式创建HTTP、命令、函数三种类型的任务
+- **智能任务分析**：AI分析任务配置合理性，提供优化建议
+- **故障诊断**：基于执行日志自动分析任务失败原因
+- **性能优化**：智能推荐任务调度策略和资源分配
+
+#### 2. 系统监控与告警
+- **实时状态监控**：AI持续监控系统健康状态和任务执行情况
+- **异常预警**：基于历史数据预测任务失败风险
+- **资源使用分析**：智能分析CPU、内存、网络等资源使用趋势
+
+#### 3. 智能运维建议
+- **最佳实践推荐**：根据业务场景推荐最优的任务配置
+- **自动化调优**：AI自动调整任务参数以优化性能
+- **容量规划**：基于历史数据预测系统容量需求
+
+### MCP配置与启动
+
+#### 环境要求
+- Python 3.8+
+- 安装MCP依赖包
+
+#### 安装MCP智能体
+```bash
+# 进入MCP目录
+cd mcp/
+
+# 安装Python依赖
+pip install -r requirements.txt
+
+# 启动MCP服务
+python mcp_server.py
+```
+
+#### MCP配置文件
+MCP配置文件位于 `mcp/mcp_config.json`：
+
+```json
+{
+  "mcpServers": {
+    "xiaohu-jobs": {
+      "command": "python",
+      "args": ["mcp/stdio_mcp.py"],
+      "env": {
+        "API_BASE_URL": "http://localhost:36363",
+        "API_TOKEN": "your-jwt-token"
+      }
+    }
+  }
+}
+```
+
+### MCP智能体使用方式
+
+#### 1. 命令行交互
+```bash
+# 启动MCP客户端
+python mcp/test_stdio_mcp.py
+
+# 交互式命令示例
+> 帮我创建每小时备份数据库的任务
+> 查看所有运行中的任务
+> 分析昨天执行失败的任务原因
+```
+
+#### 2. 集成开发环境
+支持在Trae、Cursor、Windsurf等AI编辑器中直接使用：
+
+```json
+{
+  "server": {
+    "type": "stdio",
+    "command": "python",
+    "args": ["mcp/stdio_mcp.py"]
+  }
+}
+```
+
+#### 3. API调用方式
+```python
+import requests
+
+# 通过MCP API管理任务
+response = requests.post('http://localhost:36363/mcp/task', json={
+    "action": "create",
+    "type": "http",
+    "name": "智能健康检查",
+    "schedule": "*/5 * * * *",
+    "config": {
+        "url": "https://api.example.com/health",
+        "method": "GET"
+    }
+})
+```
+
+### MCP支持的智能操作
+
+#### 任务创建智能提示
+```
+用户：我需要监控网站可用性
+MCP：我将为您创建HTTP监控任务，建议配置：
+- 检测间隔：每5分钟
+- 超时时间：30秒
+- 重试次数：3次
+- 告警阈值：连续3次失败
+是否确认创建？
+```
+
+#### 故障智能诊断
+```
+用户：任务执行失败了，帮我看看原因
+MCP：分析任务日志发现：
+- 失败时间：2024-01-15 14:30:00
+- 错误类型：网络连接超时
+- 可能原因：目标服务器响应慢或网络不稳定
+- 建议：增加超时时间到60秒，或检查网络连接
+```
+
+#### 性能优化建议
+```
+用户：系统任务太多，如何优化？
+MCP：基于当前任务分析：
+- 发现5个任务集中在9:00-9:30执行，建议错峰调度
+- 建议将非紧急任务调整到非高峰期
+- 推荐启用任务并行执行模式以提高效率
+```
+
+### MCP扩展开发
+
+#### 自定义智能函数
+在 `mcp/` 目录中添加自定义AI处理函数：
+
+```python
+# mcp/custom_intelligence.py
+class CustomIntelligence:
+    def analyze_task_performance(self, task_id):
+        """自定义任务性能分析"""
+        # 实现自定义分析逻辑
+        pass
+    
+    def predict_task_failure(self, task_config):
+        """预测任务失败概率"""
+        # 实现预测模型
+        pass
+```
+
+#### 集成机器学习模型
+```python
+# 集成预训练模型进行智能分析
+from transformers import pipeline
+
+class AIModelManager:
+    def __init__(self):
+        self.classifier = pipeline("text-classification")
+    
+    def classify_task_type(self, description):
+        """基于描述自动分类任务类型"""
+        return self.classifier(description)
+```
+
+### MCP测试与调试
+
+#### 运行测试套件
+```bash
+# 运行所有MCP功能测试
+python mcp/test_all_features.py
+
+# 运行特定测试
+python -m pytest mcp/tests/test_task_creation.py
+```
+
+#### 调试模式
+```bash
+# 启用调试日志
+export MCP_DEBUG=true
+python mcp/stdio_mcp.py --debug
+```
+
+### MCP安全考虑
+
+- **API访问控制**：MCP使用JWT token进行身份验证
+- **权限管理**：支持细粒度的操作权限控制
+- **数据脱敏**：敏感信息自动脱敏处理
+- **审计日志**：所有AI操作记录完整审计日志
+
+---
+
 ## 二次开发与扩展
 
 1. **新增业务模块**：
@@ -528,7 +728,10 @@ CMD ["./main","start"]
    - 在任务配置中选择 `mode: func` 并指定函数名
 3. **中间件扩展**：
    - 在 `middlewares/` 新增中间件并在 `core/run.go` 注册
-4. **API文档维护**：
+4. **MCP智能体扩展**：
+   - 在 `mcp/` 目录添加新的AI功能模块
+   - 继承基础MCP类实现自定义智能逻辑
+5. **API文档维护**：
    - 按照 swagger 注释规范补全接口和结构体注释
    - 运行 `swag init` 自动生成文档
 
